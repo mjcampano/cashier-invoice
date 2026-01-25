@@ -1,10 +1,5 @@
-
 import React, { useMemo } from "react";
-
-const peso = (n) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(
-    Number(n || 0)
-  );
+import { peso, uid } from "../utils";
 
 export default function DataEntry({
   data,
@@ -176,7 +171,7 @@ export default function DataEntry({
           <b>{peso(balance)}</b>
         </div>
 
-        <div className="btnRow">
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="smallBtn" onClick={addItem} type="button">+ Add Item</button>
           <button className="smallBtn" onClick={onGoPreview} type="button">Go to Preview →</button>
         </div>

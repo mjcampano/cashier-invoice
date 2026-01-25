@@ -18,6 +18,15 @@ export default function Tabs({ tab, setTab }) {
       >
         Invoice Preview
       </button>
+
+      {/* ✅ NEW: Proof of Payment Tab */}
+      <button
+        className={`tabBtn ${tab === "proof" ? "active" : ""}`}
+        onClick={() => setTab("proof")}
+        type="button"
+      >
+        Proof of Payment
+      </button>
     </div>
   );
 }

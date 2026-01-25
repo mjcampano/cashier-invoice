@@ -1,7 +1,5 @@
 import React, { forwardRef } from "react";
-
-const peso = (n) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
+import { peso } from "../utils";
 
 const Invoice = forwardRef(function Invoice(
   { business, customer, invoice, items, payments, notes },

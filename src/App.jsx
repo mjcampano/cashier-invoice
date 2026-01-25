@@ -5,18 +5,17 @@ import jsPDF from "jspdf";
 import Tabs from "./components/Tabs";
 import DataEntry from "./pages/DataEntry";
 import Preview from "./pages/Preview";
+import ProofOfPayment from "./components/ProofOfPayment";
 
-// ✅ ADD: school template imports
 import { PROGRAMS, buildSchoolItems } from "./data/tuitionTemplates";
-
-const uid = () => Math.random().toString(16).slice(2);
+import { uid } from "./utils";
 
 export default function App() {
   const invoiceRef = useRef(null);
   const [tab, setTab] = useState("form");
+  const [uploads, setUploads] = useState([]);
 
   const [data, setData] = useState({
-    // ✅ ADD: program + track option
     school: {
       programKey: "MA",
       trackKey: "THESIS_5_TERMS",
@@ -54,16 +53,13 @@ export default function App() {
         reference: "OR-10021",
         method: "Cash",
         amount: 1000,
+        proofStatus: "Verified",
       },
     ],
-    notes:
-      "Please settle your balance on or before the due date to avoid penalties. Thank you!",
+    notes: "Please settle your balance on or before the due date to avoid penalties. Thank you!",
   });
 
   const exportPDF = async () => {
-    // ✅ Important: ensure preview tab is visible before exporting (optional)
-    // setTab("preview");
-
     const element = invoiceRef.current;
     if (!element) return;
 
@@ -101,7 +97,6 @@ export default function App() {
     );
   };
 
-  // ✅ ADD: helper to apply school template (MA/PhD) into items
   const applySchoolTemplateToItems = () => {
     const templateItems = buildSchoolItems(
       data.school.programKey,
@@ -130,13 +125,19 @@ export default function App() {
             setData={setData}
             uid={uid}
             onGoPreview={() => setTab("preview")}
-            // ✅ PASS THESE for Program/Track dropdown + Apply button
             PROGRAMS={PROGRAMS}
             buildSchoolItems={buildSchoolItems}
             onApplySchoolTemplate={applySchoolTemplateToItems}
           />
-        ) : (
+        ) : tab === "preview" ? (
           <Preview invoiceRef={invoiceRef} data={data} />
+        ) : (
+          <ProofOfPayment
+            data={data}
+            setData={setData}
+            uploads={uploads}
+            setUploads={setUploads}
+          />
         )}
       </main>
     </div>
