@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
@@ -12,7 +12,12 @@ import { uid } from "./utils";
 
 export default function App() {
   const invoiceRef = useRef(null);
+
   const [tab, setTab] = useState("form");
+  const [isExporting, setIsExporting] = useState(false);
+
+  // ✅ Keep uploads in App so it persists across tab switching
+  // (we'll wire this into ProofOfPayment below)
   const [uploads, setUploads] = useState([]);
 
   const [data, setData] = useState({
@@ -20,7 +25,6 @@ export default function App() {
       programKey: "MA",
       trackKey: "THESIS_5_TERMS",
     },
-
     business: {
       name: "Sandigan Mini Mart",
       address: "Sample Address, City, Philippines",
@@ -56,55 +60,80 @@ export default function App() {
         proofStatus: "Verified",
       },
     ],
-    notes: "Please settle your balance on or before the due date to avoid penalties. Thank you!",
+    notes:
+      "Please settle your balance on or before the due date to avoid penalties. Thank you!",
   });
 
-  const exportPDF = async () => {
+  // ✅ nice-to-have: computed totals you can use later (optional)
+  const paymentsTotal = useMemo(() => {
+    return (data.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  }, [data.payments]);
+
+  /**
+   * ✅ Multi-page PDF export (works even when invoice is longer than one A4)
+   */
+  const exportPDF = useCallback(async () => {
     const element = invoiceRef.current;
-    if (!element) return;
+    if (!element || isExporting) return;
 
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-    });
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        scrollY: -window.scrollY, // prevents weird offsets
+      });
 
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("p", "mm", "a4");
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgProps = pdf.getImageProperties(imgData);
-    const imgRatio = imgProps.width / imgProps.height;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
-    let imgWidth = pdfWidth;
-    let imgHeight = imgWidth / imgRatio;
+      // Convert canvas px -> PDF mm
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = pageWidth;
+      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
-    if (imgHeight > pdfHeight) {
-      imgHeight = pdfHeight;
-      imgWidth = imgHeight * imgRatio;
+      // Multi-page slicing
+      let heightLeft = imgHeight;
+      let position = 8; // top margin
+      const marginX = 0;
+      const marginTop = 8;
+
+      // First page
+      pdf.addImage(imgData, "PNG", marginX, marginTop, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Additional pages
+      while (heightLeft > 0) {
+        pdf.addPage();
+        position = marginTop - (imgHeight - heightLeft);
+        pdf.addImage(imgData, "PNG", marginX, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const safeMonth = String(data.invoice.billingMonth || "Invoice")
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-zA-Z0-9-_]/g, "");
+
+      pdf.save(`Billing-Statement-${safeMonth}.pdf`);
+    } catch (err) {
+      console.error("Export PDF error:", err);
+      alert("PDF export failed. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
+  }, [data.invoice.billingMonth, isExporting]);
 
-    const x = (pdfWidth - imgWidth) / 2;
-    const y = 8;
-
-    pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
-    pdf.save(
-      `Billing-Statement-${String(data.invoice.billingMonth || "Invoice").replace(
-        " ",
-        "-"
-      )}.pdf`
+  const applySchoolTemplateToItems = useCallback(() => {
+    const templateItems = buildSchoolItems(data.school.programKey, data.school.trackKey).map(
+      (it) => ({ id: uid(), ...it })
     );
-  };
-
-  const applySchoolTemplateToItems = () => {
-    const templateItems = buildSchoolItems(
-      data.school.programKey,
-      data.school.trackKey
-    ).map((it) => ({ id: uid(), ...it }));
-
     setData((d) => ({ ...d, items: templateItems }));
-  };
+  }, [data.school.programKey, data.school.trackKey]);
 
   return (
     <div className="shell">
@@ -113,8 +142,14 @@ export default function App() {
 
         <Tabs tab={tab} setTab={setTab} />
 
-        <button className="exportBtn" onClick={exportPDF} type="button">
-          Export PDF
+        <button
+          className="exportBtn"
+          onClick={exportPDF}
+          type="button"
+          disabled={isExporting}
+          title={isExporting ? "Exporting..." : "Export PDF"}
+        >
+          {isExporting ? "Exporting..." : "Export PDF"}
         </button>
       </header>
 
@@ -137,8 +172,15 @@ export default function App() {
             setData={setData}
             uploads={uploads}
             setUploads={setUploads}
+            // optional: allow returning to preview quickly
+            onGoPreview={() => setTab("preview")}
           />
         )}
+
+        {/* Optional small footer (remove if you don’t want it) */}
+        {/* <div style={{ marginTop: 16, fontSize: 12, opacity: 0.7 }}>
+          Payments total: {paymentsTotal.toFixed(2)}
+        </div> */}
       </main>
     </div>
   );

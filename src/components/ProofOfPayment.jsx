@@ -1,322 +1,368 @@
-import React, { useMemo } from "react";
-import {
-  uid,
-  makeRefNo,
-  guessAmountFromFilename,
-  guessMethodFromFilename,
-  guessDateFromFilename,
-  runOcrWorker,
-} from "../utils";
+// src/components/ProofOfPayment.jsx
+import { useEffect, useMemo } from "react";
+import { v4 as uuidv4 } from "uuid";
+import Tesseract from "tesseract.js";
 
-export default function ProofOfPayment({ data, setData, uploads, setUploads }) {
-  const totalUploaded = useMemo(
-    () => uploads.reduce((sum, u) => sum + (Number(u.amount) || 0), 0),
-    [uploads]
+/** ---------- Helpers ---------- */
+
+function makeRefNo() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const short = uuidv4().replaceAll("-", "").slice(0, 6).toUpperCase();
+  return `POP-${y}${m}${day}-${short}`;
+}
+
+function guessAmountFromFilename(name) {
+  const cleaned = String(name || "").replaceAll(",", "");
+  const match = cleaned.match(/(\d+(\.\d{1,2})?)/);
+  return match ? match[1] : "";
+}
+
+function normalizeOCR(text = "") {
+  return text
+    .replace(/\u20b1/g, "PHP") // ₱ -> PHP
+    .replace(/[|]/g, "I")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * ✅ AMOUNT extraction:
+ * 1) Look for currency "PHP <amount>" values and choose the largest (usually the transfer amount).
+ * 2) If none, try "amount/total" labels.
+ */
+function extractAmount(text = "") {
+  const t = normalizeOCR(text);
+
+  const currencyMatches = [
+    ...t.matchAll(
+      /(?:PHP)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/gi
+    ),
+  ]
+    .map((m) => m[1].replace(/,/g, ""))
+    .map((v) => Number(v))
+    .filter((v) => Number.isFinite(v));
+
+  if (currencyMatches.length) {
+    const max = Math.max(...currencyMatches);
+    return max.toFixed(2);
+  }
+
+  const label = t.match(
+    /(?:amount|total)\s*[:\-]?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i
   );
+  if (label?.[1]) return Number(label[1].replace(/,/g, "")).toFixed(2);
+
+  return "";
+}
+
+/**
+ * ✅ Reference extraction:
+ * Looks specifically near the word "reference" and captures digits (5-20).
+ * This avoids picking account numbers.
+ */
+function extractReference(text = "") {
+  const t = normalizeOCR(text);
+  const lower = t.toLowerCase();
+
+  const idx = lower.indexOf("reference");
+  if (idx !== -1) {
+    const slice = t.slice(idx, idx + 160);
+
+    // "Reference Number 774996"
+    const m1 = slice.match(
+      /reference(?:\s*number|\s*no\.?)?\s*[:\-]?\s*([0-9]{5,20})/i
+    );
+    if (m1?.[1]) return m1[1];
+
+    // fallback: any 5-20 digits near "reference"
+    const m2 = slice.match(/([0-9]{5,20})/);
+    if (m2?.[1]) return m2[1];
+  }
+
+  return "";
+}
+
+/** ---------- Component ---------- */
+/**
+ * Props:
+ * - data, setData: pushes into App.jsx data.payments
+ * - uploads, setUploads: shared state from App.jsx so uploads persist across tabs
+ * - onGoPreview: optional callback button
+ */
+export default function ProofOfPayment({
+  data,
+  setData,
+  uploads,
+  setUploads,
+  onGoPreview,
+}) {
+  // ✅ ATTACHED: Use App uploads as the source of truth
+  const items = Array.isArray(uploads) ? uploads : [];
+  const setItems = typeof setUploads === "function" ? setUploads : () => {};
+
+  const total = useMemo(() => {
+    return items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  }, [items]);
+
+  // ✅ cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      items.forEach((it) => {
+        if (it?.url) URL.revokeObjectURL(it.url);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const updateItem = (id, patch) => {
+    setItems((prev) =>
+      (prev || []).map((it) => (it.id === id ? { ...it, ...patch } : it))
+    );
+  };
+
+  const removeItem = (id) => {
+    setItems((prev) => {
+      const list = prev || [];
+      const found = list.find((x) => x.id === id);
+      if (found?.url) URL.revokeObjectURL(found.url);
+      return list.filter((it) => it.id !== id);
+    });
+  };
 
   const onPickFiles = (e) => {
     const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
     const mapped = files.map((file) => {
       const url = URL.createObjectURL(file);
       return {
-        id: uid(),
+        id: uuidv4(),
         file,
         url,
+
+        // internal generated ref (always)
         refNo: makeRefNo(),
+
+        // quick auto amount guess from filename
         amount: guessAmountFromFilename(file.name),
-        method: guessMethodFromFilename(file.name),
-        date: guessDateFromFilename(file.name),
-        status: "Pending",
+
+        // OCR extracted fields
+        ocrAmount: "",
+        ocrReference: "",
         ocrProgress: 0,
+
+        method: "GCash",
+        date: new Date().toISOString().slice(0, 10),
+        note: "",
+        status: "Pending",
       };
     });
 
-    setUploads((prev) => [...mapped, ...prev]);
+    setItems((prev) => [...mapped, ...(prev || [])]);
     e.target.value = "";
-    mapped.forEach(runOcr);
   };
 
-  const updateUpload = (id, patch) => {
-    setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
-  };
+  const verifyItem = (id) => updateItem(id, { status: "Verified" });
+  const rejectItem = (id) => updateItem(id, { status: "Rejected" });
 
-  const removeUpload = (id) => {
-    setUploads((prev) => {
-      const target = prev.find((u) => u.id === id);
-      if (target?.url) URL.revokeObjectURL(target.url);
-      return prev.filter((u) => u.id !== id);
-    });
-  };
+  // ✅ OCR reader
+  const autoReadOCR = async (it) => {
+    updateItem(it.id, { status: "Reading OCR...", ocrProgress: 0 });
 
-  const runOcr = async (upload) => {
-    updateUpload(upload.id, { status: "Reading OCR", ocrProgress: 5 });
     try {
-      const parsed = await runOcrWorker(upload.file, (progress) => {
-        updateUpload(upload.id, { ocrProgress: progress });
+      const result = await Tesseract.recognize(it.url, "eng", {
+        logger: (m) => {
+          if (m.status === "recognizing text") {
+            const pct = Math.round((m.progress || 0) * 100);
+            updateItem(it.id, {
+              ocrProgress: pct,
+              status: `Reading OCR (${pct}%)`,
+            });
+          }
+        },
       });
 
-      const finalAmount = parsed.amount || guessAmountFromFilename(upload.file.name) || "";
-      const finalRef = parsed.reference || makeRefNo();
-      const finalDate = parsed.date || guessDateFromFilename(upload.file.name) || new Date().toISOString().slice(0, 10);
+      const text = result?.data?.text || "";
+      const amount = extractAmount(text);
+      const ref = extractReference(text);
 
-      updateUpload(upload.id, {
-        ocrProgress: 100,
-        status: "Pending",
-        amount: finalAmount,
-        refNo: finalRef,
-        date: finalDate,
+      updateItem(it.id, {
+        ocrAmount: amount,
+        ocrReference: ref,
+        amount: amount || it.amount,
+        status: amount || ref ? "Auto-filled (OCR)" : "OCR Failed",
+        note: ref ? `OCR Ref: ${ref}` : it.note,
       });
     } catch (err) {
-      console.error("OCR failed", err);
-      updateUpload(upload.id, { status: "Pending", ocrProgress: 0 });
+      console.error(err);
+      updateItem(it.id, { status: "OCR Error" });
     }
   };
 
-  const addToPayments = (upload) => {
+  // ✅ push into App.jsx payments
+  const addToPayments = (it) => {
+    if (!setData) {
+      updateItem(it.id, { status: "Added (local only)" });
+      return;
+    }
+
+    const finalRef = it.ocrReference || it.refNo;
+
     setData((d) => ({
       ...d,
       payments: [
         {
-          id: uid(),
-          date: upload.date,
-          reference: upload.refNo,
-          method: upload.method,
-          amount: Number(upload.amount) || 0,
-          proofUrl: upload.url,
-          proofFileName: upload.file?.name || "",
-          proofStatus: upload.status,
+          id: uuidv4(),
+          date: it.date,
+          reference: finalRef,
+          method: it.method,
+          amount: Number(it.amount) || 0,
+          proofUrl: it.url,
+          proofFileName: it.file?.name || "",
+          proofStatus: it.status,
+          note: it.note,
         },
         ...(d.payments || []),
       ],
     }));
-    updateUpload(upload.id, { status: "Added" });
-  };
 
-  const verifyUpload = (upload) => {
-    updateUpload(upload.id, { status: "Verified" });
-    setData((d) => ({
-      ...d,
-      payments: (d.payments || []).map((p) =>
-        p.reference === upload.refNo ? { ...p, proofStatus: "Verified" } : p
-      ),
-    }));
-  };
-
-  const rejectUpload = (upload) => {
-    updateUpload(upload.id, { status: "Rejected" });
-    setData((d) => ({
-      ...d,
-      payments: (d.payments || []).map((p) =>
-        p.reference === upload.refNo ? { ...p, proofStatus: "Rejected" } : p
-      ),
-    }));
+    updateItem(it.id, { status: "Added to Payments" });
   };
 
   return (
-    <div style={styles.container}>
-      <h2 style={styles.h2}>Proof of Payment</h2>
-
-      <div style={styles.controlsRow}>
-        <input type="file" accept="image/*" multiple onChange={onPickFiles} />
-        <div>
-          <b>Total (Uploads):</b> {totalUploaded.toFixed(2)}
-        </div>
-        <div>
-          <b>Payments Count:</b> {(data.payments || []).length}
-        </div>
+    <div style={{ maxWidth: 1000, margin: "30px auto", padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h2 style={{ margin: 0 }}>Proof of Payment Verification</h2>
+        {typeof onGoPreview === "function" && (
+          <button type="button" onClick={onGoPreview} style={{ marginLeft: "auto" }}>
+            Back to Preview
+          </button>
+        )}
       </div>
 
-      <hr style={styles.divider} />
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+        <input type="file" accept="image/*" multiple onChange={onPickFiles} />
+        <div>
+          <b>Total Amount:</b> {total.toFixed(2)}
+        </div>
+        {data?.payments && (
+          <div>
+            <b>Payments:</b> {data.payments.length}
+          </div>
+        )}
+      </div>
 
-      {uploads.length === 0 ? (
-        <p>No uploads yet. Choose image files above.</p>
+      <hr style={{ margin: "16px 0" }} />
+
+      {items.length === 0 ? (
+        <p>No uploads yet.</p>
       ) : (
-        <div style={styles.uploadsGrid}>
-          {uploads.map((u) => (
-            <UploadCard
-              key={u.id}
-              upload={u}
-              onUpdate={updateUpload}
-              onRemove={removeUpload}
-              onAddPayment={addToPayments}
-              onVerify={verifyUpload}
-              onReject={rejectUpload}
-            />
+        <div style={{ display: "grid", gap: 16 }}>
+          {items.map((it) => (
+            <div
+              key={it.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "180px 1fr",
+                gap: 16,
+                padding: 12,
+                border: "1px solid #ddd",
+                borderRadius: 10,
+              }}
+            >
+              <div>
+                <img
+                  src={it.url}
+                  alt="proof"
+                  style={{
+                    width: "180px",
+                    height: "180px",
+                    objectFit: "cover",
+                    borderRadius: 8,
+                  }}
+                />
+                <div style={{ fontSize: 12, marginTop: 6, wordBreak: "break-all" }}>
+                  {it.file?.name || "—"}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: 10 }}>
+                  <label><b>Reference No:</b></label>
+                  <input value={it.refNo} readOnly />
+
+                  <label><b>Amount Paid:</b></label>
+                  <input
+                    value={it.amount}
+                    onChange={(e) => updateItem(it.id, { amount: e.target.value })}
+                    placeholder="Auto from filename or OCR, or type manually"
+                  />
+
+                  <label><b>Method:</b></label>
+                  <select
+                    value={it.method}
+                    onChange={(e) => updateItem(it.id, { method: e.target.value })}
+                  >
+                    <option value="GCash">GCash</option>
+                    <option value="Maya">Maya</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Other">Other</option>
+                  </select>
+
+                  <label><b>Date:</b></label>
+                  <input
+                    type="date"
+                    value={it.date}
+                    onChange={(e) => updateItem(it.id, { date: e.target.value })}
+                  />
+
+                  <label><b>Status:</b></label>
+                  <div style={{ paddingTop: 6 }}>
+                    <span style={{ padding: "4px 10px", borderRadius: 999, border: "1px solid #ccc" }}>
+                      {it.status}
+                    </span>
+                    {String(it.status || "").startsWith("Reading OCR") && (
+                      <div style={{ fontSize: 12, marginTop: 4 }}>
+                        OCR: {it.ocrProgress}%
+                      </div>
+                    )}
+                  </div>
+
+                  <label><b>Note:</b></label>
+                  <input
+                    value={it.note}
+                    onChange={(e) => updateItem(it.id, { note: e.target.value })}
+                    placeholder="Optional remarks"
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button type="button" onClick={() => autoReadOCR(it)}>Auto Read OCR</button>
+                  <button type="button" onClick={() => addToPayments(it)}>Add to Payments</button>
+                  <button type="button" onClick={() => verifyItem(it.id)}>Verify</button>
+                  <button type="button" onClick={() => rejectItem(it.id)}>Reject</button>
+                  <button type="button" onClick={() => removeItem(it.id)}>Remove</button>
+                </div>
+
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  Tip: For instant auto-fill without OCR, rename files like <b>gcash_1250.jpg</b> or{" "}
+                  <b>paid-999.50.png</b>.
+                </div>
+
+                {(it.ocrAmount || it.ocrReference) && (
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    <b>OCR Result:</b>{" "}
+                    {it.ocrAmount ? `Amount=${it.ocrAmount}` : "Amount=—"}{" "}
+                    {it.ocrReference ? ` | Ref=${it.ocrReference}` : " | Ref=—"}
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}
-
-      <hr style={styles.divider} />
-
-      <h3>Current Payments (data.payments)</h3>
-      <PaymentsTable payments={data.payments || []} />
     </div>
   );
 }
-
-function UploadCard({
-  upload,
-  onUpdate,
-  onRemove,
-  onAddPayment,
-  onVerify,
-  onReject,
-}) {
-  return (
-    <div style={styles.uploadCard}>
-      <div style={styles.imageSection}>
-        <img
-          src={upload.url}
-          alt="proof"
-          style={styles.uploadImage}
-        />
-        <div style={styles.fileName}>{upload.file?.name}</div>
-      </div>
-
-      <div style={styles.detailsSection}>
-        <div style={styles.fieldGrid}>
-          <label><b>Reference No:</b></label>
-          <input value={upload.refNo} readOnly />
-
-          <label><b>Amount Paid:</b></label>
-          <input
-            value={upload.amount}
-            onChange={(e) => onUpdate(upload.id, { amount: e.target.value })}
-            placeholder="Auto from filename or type manually"
-          />
-
-          <label><b>Method:</b></label>
-          <select
-            value={upload.method}
-            onChange={(e) => onUpdate(upload.id, { method: e.target.value })}
-          >
-            <option value="GCash">GCash</option>
-            <option value="Maya">Maya</option>
-            <option value="Bank Transfer">Bank Transfer</option>
-            <option value="Cash">Cash</option>
-            <option value="Other">Other</option>
-          </select>
-
-          <label><b>Date:</b></label>
-          <input
-            type="date"
-            value={upload.date}
-            onChange={(e) => onUpdate(upload.id, { date: e.target.value })}
-          />
-
-          <label><b>Status:</b></label>
-          <div style={styles.statusBadge}>
-            <span>{upload.status}</span>
-            {upload.ocrProgress > 0 && upload.ocrProgress < 100 && (
-              <div style={styles.ocrText}>OCR: {upload.ocrProgress}%</div>
-            )}
-            {upload.ocrProgress === 100 && (
-              <div style={styles.ocrReady}>OCR ready</div>
-            )}
-          </div>
-        </div>
-
-        <div style={styles.actionsRow}>
-          <button type="button" onClick={() => onAddPayment(upload)}>
-            Add to Payments
-          </button>
-          <button type="button" onClick={() => onVerify(upload)}>
-            Verify
-          </button>
-          <button type="button" onClick={() => onReject(upload)}>
-            Reject
-          </button>
-          <button type="button" onClick={() => onRemove(upload.id)}>
-            Remove
-          </button>
-        </div>
-
-        <div style={styles.tip}>
-          Tip: If you want amount to auto-fill, name files like <b>gcash_1250.jpg</b> or <b>paid-999.50.png</b>.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PaymentsTable({ payments }) {
-  return (
-    <div style={styles.tableWrapper}>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.thLeft}>Date</th>
-            <th style={styles.thLeft}>Reference</th>
-            <th style={styles.thLeft}>Method</th>
-            <th style={styles.thRight}>Amount</th>
-            <th style={styles.thLeft}>Proof Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {payments.map((p) => (
-            <tr key={p.id}>
-              <td style={styles.tdLeft}>{p.date}</td>
-              <td style={styles.tdLeft}>{p.reference}</td>
-              <td style={styles.tdLeft}>{p.method}</td>
-              <td style={styles.tdRight}>{Number(p.amount || 0).toFixed(2)}</td>
-              <td style={styles.tdLeft}>{p.proofStatus || "-"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-const styles = {
-  container: { maxWidth: 1050, margin: "0 auto" },
-  h2: { marginTop: 0 },
-  controlsRow: {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-  divider: { margin: "16px 0" },
-  uploadsGrid: { display: "grid", gap: 14 },
-  uploadCard: {
-    display: "grid",
-    gridTemplateColumns: "180px 1fr",
-    gap: 14,
-    padding: 12,
-    border: "1px solid #ddd",
-    borderRadius: 10,
-  },
-  imageSection: { display: "flex", flexDirection: "column", alignItems: "center" },
-  uploadImage: {
-    width: 180,
-    height: 180,
-    objectFit: "cover",
-    borderRadius: 8,
-    border: "1px solid #eee",
-  },
-  fileName: { fontSize: 12, marginTop: 6, wordBreak: "break-all" },
-  detailsSection: { display: "grid", gap: 10 },
-  fieldGrid: {
-    display: "grid",
-    gridTemplateColumns: "170px 1fr",
-    gap: 10,
-  },
-  statusBadge: {
-    paddingTop: 6,
-    display: "flex",
-    flexDirection: "column",
-  },
-  ocrText: { fontSize: 11, marginTop: 4 },
-  ocrReady: { fontSize: 11, marginTop: 4, color: "green" },
-  actionsRow: { display: "flex", gap: 10, flexWrap: "wrap" },
-  tip: { fontSize: 12, opacity: 0.8 },
-  tableWrapper: { overflowX: "auto" },
-  table: { width: "100%", borderCollapse: "collapse" },
-  thLeft: { borderBottom: "1px solid #ddd", textAlign: "left", padding: 8 },
-  thRight: { borderBottom: "1px solid #ddd", textAlign: "right", padding: 8 },
-  tdLeft: { borderBottom: "1px solid #f1f1f1", padding: 8 },
-  tdRight: { borderBottom: "1px solid #f1f1f1", padding: 8, textAlign: "right" },
-};
