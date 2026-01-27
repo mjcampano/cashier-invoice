@@ -1,7 +1,6 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
-
+import jsPDF from "jspdf";  
 import Tabs from "./components/Tabs";
 import DataEntry from "./pages/DataEntry";
 import Preview from "./pages/Preview";
@@ -63,11 +62,6 @@ export default function App() {
     notes:
       "Please settle your balance on or before the due date to avoid penalties. Thank you!",
   });
-
-  // ✅ nice-to-have: computed totals you can use later (optional)
-  const paymentsTotal = useMemo(() => {
-    return (data.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  }, [data.payments]);
 
   /**
    * ✅ Multi-page PDF export (works even when invoice is longer than one A4)
