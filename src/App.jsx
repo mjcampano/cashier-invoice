@@ -5,6 +5,8 @@ import Tabs from "./components/Tabs";
 import DataEntry from "./pages/DataEntry";
 import Preview from "./pages/Preview";
 import ProofOfPayment from "./components/ProofOfPayment";
+import AdminLayout from "./layouts/AdminLayout";
+import AdminDashboard from "./pages/admin/Dashboard";
 
 import { PROGRAMS, buildSchoolItems } from "./data/tuitionTemplates";
 import { uid } from "./utils";
@@ -12,11 +14,12 @@ import { uid } from "./utils";
 export default function App() {
   const invoiceRef = useRef(null);
 
+  const [mode, setMode] = useState("admin"); // "admin" or "invoice"
+  const [activeMenu, setActiveMenu] = useState("dashboard");
   const [tab, setTab] = useState("form");
   const [isExporting, setIsExporting] = useState(false);
 
   // ✅ Keep uploads in App so it persists across tab switching
-  // (we'll wire this into ProofOfPayment below)
   const [uploads, setUploads] = useState([]);
 
   const [data, setData] = useState({
@@ -25,8 +28,8 @@ export default function App() {
       trackKey: "THESIS_5_TERMS",
     },
     business: {
-      name: "Sandigan Mini Mart",
-      address: "Sample Address, City, Philippines",
+      name: "Sandigan Colleges, Inc.",
+      address: "web:https://sandigancolleges.edu.ph/",
       phone: "0917 000 0000",
       tin: "123-456-789-000",
     },
@@ -41,8 +44,8 @@ export default function App() {
       statementNo: "MAY-2026-0001",
       dateIssued: "2026-06-01",
       dueDate: "2026-06-10",
-      cashierName: "Cashier A",
-      cashierId: "C-001",
+      cashierName: "Bachelor of Science in Information Technology",
+      cashierId: "Software Development",
     },
     items: [
       { id: uid(), description: "Rice (25kg)", qty: 1, unitPrice: 1350 },
@@ -64,7 +67,7 @@ export default function App() {
   });
 
   /**
-   * ✅ Multi-page PDF export (works even when invoice is longer than one A4)
+   * ✅ Multi-page PDF export
    */
   const exportPDF = useCallback(async () => {
     const element = invoiceRef.current;
@@ -76,7 +79,7 @@ export default function App() {
         scale: 2,
         useCORS: true,
         backgroundColor: "#ffffff",
-        scrollY: -window.scrollY, // prevents weird offsets
+        scrollY: -window.scrollY,
       });
 
       const imgData = canvas.toDataURL("image/png");
@@ -85,22 +88,18 @@ export default function App() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      // Convert canvas px -> PDF mm
       const imgProps = pdf.getImageProperties(imgData);
       const imgWidth = pageWidth;
       const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
-      // Multi-page slicing
       let heightLeft = imgHeight;
-      let position = 8; // top margin
+      let position = 8;
       const marginX = 0;
       const marginTop = 8;
 
-      // First page
       pdf.addImage(imgData, "PNG", marginX, marginTop, imgWidth, imgHeight);
       heightLeft -= pageHeight;
 
-      // Additional pages
       while (heightLeft > 0) {
         pdf.addPage();
         position = marginTop - (imgHeight - heightLeft);
@@ -130,52 +129,54 @@ export default function App() {
   }, [data.school.programKey, data.school.trackKey]);
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="brand">Cashier Invoice</div>
+    <>
+      {mode === "admin" ? (
+        <AdminLayout setMode={setMode} activeMenu={activeMenu} setActiveMenu={setActiveMenu}>
+          <AdminDashboard />
+        </AdminLayout>
+      ) : (
+        <div className="shell">
+          <header className="topbar">
+            <div className="brand">Cashier Invoice</div>
 
-        <Tabs tab={tab} setTab={setTab} />
+            <Tabs tab={tab} setTab={setTab} />
 
-        <button
-          className="exportBtn"
-          onClick={exportPDF}
-          type="button"
-          disabled={isExporting}
-          title={isExporting ? "Exporting..." : "Export PDF"}
-        >
-          {isExporting ? "Exporting..." : "Export PDF"}
-        </button>
-      </header>
+            <button
+              className="exportBtn"
+              onClick={exportPDF}
+              type="button"
+              disabled={isExporting}
+              title={isExporting ? "Exporting..." : "Export PDF"}
+            >
+              {isExporting ? "Exporting..." : "Export PDF"}
+            </button>
+          </header>
 
-      <main className="main">
-        {tab === "form" ? (
-          <DataEntry
-            data={data}
-            setData={setData}
-            uid={uid}
-            onGoPreview={() => setTab("preview")}
-            PROGRAMS={PROGRAMS}
-            buildSchoolItems={buildSchoolItems}
-            onApplySchoolTemplate={applySchoolTemplateToItems}
-          />
-        ) : tab === "preview" ? (
-          <Preview invoiceRef={invoiceRef} data={data} />
-        ) : (
-          <ProofOfPayment
-            data={data}
-            setData={setData}
-            uploads={uploads}
-            setUploads={setUploads}
-            // optional: allow returning to preview quickly
-            onGoPreview={() => setTab("preview")}
-          />
-        )}
-
-        {/* Optional small footer (remove if you don’t want it) */}
-        {/* <div style={{ marginTop: 16, fontSize: 12, opacity: 0.7 }}>
-          Payments total: {paymentsTotal.toFixed(2)}
-        </div> */}
-      </main>
-    </div>
+          <main className="main">
+            {tab === "form" ? (
+              <DataEntry
+                data={data}
+                setData={setData}
+                uid={uid}
+                onGoPreview={() => setTab("preview")}
+                PROGRAMS={PROGRAMS}
+                buildSchoolItems={buildSchoolItems}
+                onApplySchoolTemplate={applySchoolTemplateToItems}
+              />
+            ) : tab === "preview" ? (
+              <Preview invoiceRef={invoiceRef} data={data} />
+            ) : (
+              <ProofOfPayment
+                data={data}
+                setData={setData}
+                uploads={uploads}
+                setUploads={setUploads}
+                onGoPreview={() => setTab("preview")}
+              />
+            )}
+          </main>
+        </div>
+      )}
+    </>
   );
 }

@@ -115,10 +115,10 @@ export default function DataEntry({
         <FormRow label="Due Date">
           <input className="input" type="date" value={data.invoice.dueDate} onChange={(e) => setInvoice("dueDate", e.target.value)} />
         </FormRow>
-        <FormRow label="Cashier Name">
+        <FormRow label="Course">
           <input className="input" value={data.invoice.cashierName} onChange={(e) => setInvoice("cashierName", e.target.value)} />
         </FormRow>
-        <FormRow label="Cashier ID">
+        <FormRow label="Major">
           <input className="input" value={data.invoice.cashierId} onChange={(e) => setInvoice("cashierId", e.target.value)} />
         </FormRow>
 
