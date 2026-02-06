@@ -7,6 +7,7 @@ import Preview from "./pages/Preview";
 import ProofOfPayment from "./components/ProofOfPayment";
 import AdminLayout from "./layouts/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
+import Customers from "./pages/admin/Customers";
 
 import { PROGRAMS, buildSchoolItems } from "./data/tuitionTemplates";
 import { uid } from "./utils";
@@ -132,7 +133,7 @@ export default function App() {
     <>
       {mode === "admin" ? (
         <AdminLayout setMode={setMode} activeMenu={activeMenu} setActiveMenu={setActiveMenu}>
-          <AdminDashboard />
+          {activeMenu === "students" ? <Customers /> : <AdminDashboard />}
         </AdminLayout>
       ) : (
         <div className="shell">

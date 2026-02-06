@@ -19,16 +19,6 @@ export default function Sidebar({ activeMenu, setActiveMenu, setMode }) {
     if (menuId === "finance" && setMode) {
       setMode("invoice");
     }
-
-    // Student page
-    if (menuId === "students" && setMode) {
-      setMode("students");
-    }
-
-    // Dashboard
-    if (menuId === "dashboard" && setMode) {
-      setMode("dashboard");
-    }
   };
 
   return (

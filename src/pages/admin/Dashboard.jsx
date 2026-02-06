@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "../../styles/admin/dashboard.css";
 import "../../styles/admin/professional.css";
 import "../../styles/admin/addstudentmodal.css";
-import AddStudent from "../../components/admin/AddStudent"; 
+import AddStudent from "../../components/admin/AddStudent";
+import "./Customers";
 
 export default function AdminDashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date(2035, 2)); // March 2035
