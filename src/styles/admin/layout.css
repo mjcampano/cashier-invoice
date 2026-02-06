@@ -1,0 +1,31 @@
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #ffffff;
+}
+
+.admin-content {
+  flex: 1;
+  margin-left: 200px;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #f5f0ff 0%, #fff5f8 100%);
+}
+
+.content-wrapper {
+  padding: 40px;
+  max-width: 1600px;
+}
+
+@media (max-width: 768px) {
+  .admin-layout {
+    flex-direction: column;
+  }
+
+  .admin-content {
+    margin-left: 0;
+  }
+
+  .content-wrapper {
+    padding: 20px;
+  }
+}
