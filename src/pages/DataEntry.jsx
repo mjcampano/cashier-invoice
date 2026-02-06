@@ -8,6 +8,15 @@ export default function DataEntry({
   uid,
   PROGRAMS,
   onApplySchoolTemplate,
+  onSaveInvoice,
+  onLoadLatest,
+  saveStatus,
+  saveDisabled,
+  loadDisabled,
+  apiStatus,
+  apiMessage,
+  apiCheckedAt,
+  onCheckApi,
 }) {
   const subTotal = useMemo(
     () =>
@@ -24,6 +33,15 @@ export default function DataEntry({
   );
 
   const balance = subTotal - paymentsTotal;
+
+  const apiStatusLabel =
+    apiStatus === "ok"
+      ? "Connected"
+      : apiStatus === "checking"
+        ? "Checking..."
+        : apiStatus === "error"
+          ? "Offline"
+          : "Unknown";
 
   const setBusiness = (k, v) =>
     setData((d) => ({ ...d, business: { ...d.business, [k]: v } }));
@@ -173,8 +191,42 @@ export default function DataEntry({
 
         <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="smallBtn" onClick={addItem} type="button">+ Add Item</button>
+          {onSaveInvoice && (
+            <button className="smallBtn" onClick={onSaveInvoice} type="button" disabled={saveDisabled}>
+              Save Invoice
+            </button>
+          )}
+          {onLoadLatest && (
+            <button className="smallBtn" onClick={onLoadLatest} type="button" disabled={loadDisabled}>
+              Load Latest
+            </button>
+          )}
           <button className="smallBtn" onClick={onGoPreview} type="button">Go to Preview →</button>
         </div>
+        {saveStatus && <div className="smallMuted">{saveStatus}</div>}
+        {onCheckApi && (
+          <div className="apiStatusRow">
+            <div className={`apiStatusBadge ${apiStatus}`}>
+              API: {apiStatusLabel}
+            </div>
+            <button
+              className="actionBtn"
+              onClick={onCheckApi}
+              type="button"
+              disabled={apiStatus === "checking"}
+            >
+              Check API
+            </button>
+            {apiCheckedAt && (
+              <div className="apiStatusTime">
+                Last checked: {new Date(apiCheckedAt).toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+        )}
+        {apiStatus === "error" && apiMessage && (
+          <div className="smallMuted">{apiMessage}</div>
+        )}
 
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
           {data.items.map((it) => (
