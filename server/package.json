@@ -1,0 +1,16 @@
+{
+  "name": "cashier-invoice-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "init:db": "node scripts/init-db.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "mongoose": "^8.9.0"
+  }
+}
