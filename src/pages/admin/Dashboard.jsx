@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "../../styles/admin/dashboard.css";
 import "../../styles/admin/professional.css";
+import AddStudent from "../../components/admin/AddStudent"; 
 
 export default function AdminDashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date(2035, 2)); // March 2035
@@ -8,6 +10,40 @@ export default function AdminDashboard() {
   const [performanceFilter, setPerformanceFilter] = useState("semester");
   const [earningsFilter, setEarningsFilter] = useState("year");
   const [isLoading, setIsLoading] = useState(false);
+  
+  const [showAddStudent, setShowAddStudent] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [formData, setFormData] = useState({
+        student_no: "",
+        last_name: "",
+        first_name: "",
+        middle_name: "",
+        birthdate: "",
+        gender: "",
+        address: "",
+        contact_no: "",
+        email: "",
+        password: "",
+        course: ""
+  });
+  const handleChange = (e) => {
+  setFormData({
+    ...formData,
+    [e.target.name]: e.target.value
+  });
+};
+
+const handleSubmit = (e) => {
+  e.preventDefault();
+
+  console.log("Student data:", formData); // for now
+
+  // later you will send this to backend
+
+  setShowAddStudent(false); // close modal after submit
+};
+  const navigate = useNavigate();
+
 
   // Calendar logic
   const getDaysInMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -115,7 +151,7 @@ export default function AdminDashboard() {
   // Quick Actions
   const quickActions = [
     { label: "Generate Report", icon: "📄", color: "#667eea" },
-    { label: "Add Student", icon: "👤", color: "#48bb78" },
+    { label: "Add Student", icon: "👤", color: "#48bb78", path: "/add-student" },
     { label: "Send Notice", icon: "📢", color: "#f59e0b" },
     { label: "View Analytics", icon: "📊", color: "#3b82f6" },
   ];
@@ -186,16 +222,35 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Quick Actions */}
+     {/* Quick Actions */}
       <div className="quick-actions-section">
         {quickActions.map((action, i) => (
-          <button key={i} className="quick-action-btn" style={{ '--action-color': action.color }}>
+          <button
+            key={i}
+            className="quick-action-btn"
+            style={{ '--action-color': action.color }}
+            onClick={() => {
+              if (action.label === "Add Student") {
+                setShowAddStudent(true);   // open modal
+              } else if (action.path) {
+                navigate(action.path);   // normal navigation
+              }
+            }}
+          >
             <span className="action-icon">{action.icon}</span>
             <span className="action-label">{action.label}</span>
           </button>
         ))}
       </div>
-
+      {showAddStudent && (
+        <AddStudent
+          closeModal={() => setShowAddStudent(false)}
+          formData={formData}
+          handleChange={handleChange}
+          handleSubmit={handleSubmit}
+          editId={editId}
+        />
+      )}
       {/* Main Content Grid */}
       <div className="content-grid-pro">
         {/* Left Column - Analytics */}
