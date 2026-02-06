@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../styles/admin/dashboard.css";
 import "../../styles/admin/professional.css";
+import "../../styles/admin/addstudentmodal.css";
 import AddStudent from "../../components/admin/AddStudent"; 
 
 export default function AdminDashboard() {
