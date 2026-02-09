@@ -3,11 +3,12 @@ import mongoose from "mongoose";
 
 dotenv.config();
 
-const uri = process.env.MONGODB_URI;
+const uri =
+  process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;
 const collectionName = process.env.MONGO_COLLECTION || "invoices";
 
 if (!uri) {
-  console.error("Missing MONGODB_URI in environment.");
+  console.error("Missing MongoDB URI. Set MONGODB_URI, MONGO_URI, or DATABASE_URL.");
   process.exit(1);
 }
 

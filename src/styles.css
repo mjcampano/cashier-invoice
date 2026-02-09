@@ -486,6 +486,114 @@ textarea::placeholder { color: #97a1b6; }
   color: var(--muted);
 }
 
+.dataEntryPage {
+  display: grid;
+  gap: 16px;
+}
+
+.dataEntryToolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.savedInvoicesTableWrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.savedInvoicesTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
+}
+
+.savedInvoicesTable th,
+.savedInvoicesTable td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  text-align: left;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.savedInvoicesTable th {
+  background: #f8fafc;
+  color: var(--primary-2);
+  font-weight: 800;
+}
+
+.savedInvoicesTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.savedInvoicesTable tbody tr.activeRow td {
+  background: #eef6ff;
+}
+
+.savedInvoicesActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.invoiceEditorModalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 18, 33, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+}
+
+.invoiceEditorModal {
+  width: min(1400px, 100%);
+  max-height: 94vh;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.invoiceEditorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(120deg, #eef2ff, #f8fafc);
+}
+
+.invoiceEditorTitle {
+  margin: 0;
+  color: var(--primary-2);
+  font-size: 18px;
+}
+
+.invoiceEditorLoading {
+  padding: 24px 16px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.invoiceEditorBody {
+  padding: 16px;
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+}
+
 /* ====== Item Cards ====== */
 
 .rowCard {
@@ -528,4 +636,10 @@ textarea::placeholder { color: #97a1b6; }
   .grid { grid-template-columns: 1fr 1fr; }
   .row3 { grid-template-columns: 1fr 1fr 1fr; }
   body { padding: 40px; }
+}
+
+@media (min-width: 1100px) {
+  .invoiceEditorBody {
+    grid-template-columns: 1fr 1fr;
+  }
 }
