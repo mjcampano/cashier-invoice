@@ -12,8 +12,11 @@ import { PROGRAMS, buildSchoolItems } from "./data/tuitionTemplates";
 import { uid } from "./utils";
 import {
   createInvoice,
+  deleteInvoice,
   getApiHealth,
+  getInvoice,
   getLatestInvoice,
+  listInvoices,
   updateInvoice,
 } from "./api/invoices";
 
@@ -95,6 +98,11 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isListingInvoices, setIsListingInvoices] = useState(false);
+  const [isDeleteTestRunning, setIsDeleteTestRunning] = useState(false);
+  const [invoiceList, setInvoiceList] = useState([]);
+  const [invoiceListStatus, setInvoiceListStatus] = useState("");
+  const [activeInvoiceActionId, setActiveInvoiceActionId] = useState(null);
   const [apiStatus, setApiStatus] = useState("idle"); // idle | checking | ok | error
   const [apiMessage, setApiMessage] = useState("");
   const [apiCheckedAt, setApiCheckedAt] = useState(null);
@@ -166,6 +174,25 @@ export default function App() {
     setData((d) => ({ ...d, items: templateItems }));
   }, [data.school.programKey, data.school.trackKey]);
 
+  const handleRefreshInvoices = useCallback(async () => {
+    setIsListingInvoices(true);
+    setInvoiceListStatus("Loading saved students...");
+
+    try {
+      const response = await listInvoices();
+      const items = Array.isArray(response?.items) ? response.items : [];
+      setInvoiceList(items);
+      setInvoiceListStatus(
+        items.length ? `${items.length} invoice(s) found.` : "No saved students yet."
+      );
+    } catch (err) {
+      console.error("List invoices error:", err);
+      setInvoiceListStatus(err.message || "Failed to load saved students.");
+    } finally {
+      setIsListingInvoices(false);
+    }
+  }, []);
+
   const handleSaveInvoice = useCallback(async () => {
     if (isSaving) return;
 
@@ -179,13 +206,14 @@ export default function App() {
 
       setInvoiceId(response.id);
       setSaveStatus(`Saved at ${new Date().toLocaleTimeString()}`);
+      await handleRefreshInvoices();
     } catch (err) {
       console.error("Save invoice error:", err);
       setSaveStatus(err.message || "Save failed.");
     } finally {
       setIsSaving(false);
     }
-  }, [data, invoiceId, isSaving]);
+  }, [data, handleRefreshInvoices, invoiceId, isSaving]);
 
   const handleLoadLatest = useCallback(async () => {
     if (isLoading) return;
@@ -210,6 +238,103 @@ export default function App() {
     }
   }, [isLoading]);
 
+  const handleLoadInvoice = useCallback(
+    async (id) => {
+      if (!id || isLoading) return;
+
+      setIsLoading(true);
+      setActiveInvoiceActionId(id);
+      setSaveStatus("Loading selected invoice...");
+
+      try {
+        const response = await getInvoice(id);
+        setData(normalizeInvoiceData(response.data));
+        setInvoiceId(response.id);
+        setSaveStatus(`Loaded invoice ${response.id}`);
+      } catch (err) {
+        console.error("Load invoice by id error:", err);
+        setSaveStatus(err.message || "Load failed.");
+      } finally {
+        setActiveInvoiceActionId(null);
+        setIsLoading(false);
+      }
+    },
+    [isLoading]
+  );
+
+  const handleDeleteInvoice = useCallback(
+    async (id) => {
+      if (!id) return;
+
+      const confirmed = window.confirm(
+        "Delete this saved student invoice? This cannot be undone."
+      );
+      if (!confirmed) return;
+
+      setActiveInvoiceActionId(id);
+      setSaveStatus("Deleting invoice...");
+
+      try {
+        await deleteInvoice(id);
+        if (invoiceId === id) {
+          setInvoiceId(null);
+          setData(createDefaultData());
+        }
+        setSaveStatus("Invoice deleted.");
+        await handleRefreshInvoices();
+      } catch (err) {
+        console.error("Delete invoice error:", err);
+        setSaveStatus(err.message || "Delete failed.");
+      } finally {
+        setActiveInvoiceActionId(null);
+      }
+    },
+    [handleRefreshInvoices, invoiceId]
+  );
+
+  const handleNewInvoice = useCallback(() => {
+    setData(createDefaultData());
+    setInvoiceId(null);
+    setSaveStatus("New invoice form ready.");
+  }, []);
+
+  const handleRunDeleteApiTest = useCallback(async () => {
+    if (isDeleteTestRunning) return;
+
+    setIsDeleteTestRunning(true);
+    setSaveStatus("Running delete API test...");
+
+    try {
+      const now = Date.now();
+      const base = createDefaultData();
+      const testPayload = {
+        ...base,
+        customer: {
+          ...base.customer,
+          name: `DELETE API TEST ${now}`,
+          accountNo: `TEST-${now}`,
+        },
+        invoice: {
+          ...base.invoice,
+          statementNo: `DEL-TEST-${now}`,
+          billingMonth: "Delete API Test",
+        },
+        notes: "Temporary record created by Delete API test.",
+      };
+
+      const created = await createInvoice(testPayload);
+      await deleteInvoice(created.id);
+
+      setSaveStatus(`Delete API test passed at ${new Date().toLocaleTimeString()}`);
+      await handleRefreshInvoices();
+    } catch (err) {
+      console.error("Delete API test error:", err);
+      setSaveStatus(`Delete API test failed: ${err.message || "Unknown error"}`);
+    } finally {
+      setIsDeleteTestRunning(false);
+    }
+  }, [handleRefreshInvoices, isDeleteTestRunning]);
+
   const handleCheckApi = useCallback(async () => {
     setApiStatus("checking");
     setApiMessage("Checking connection...");
@@ -229,7 +354,8 @@ export default function App() {
 
   useEffect(() => {
     handleCheckApi();
-  }, [handleCheckApi]);
+    handleRefreshInvoices();
+  }, [handleCheckApi, handleRefreshInvoices]);
 
   return (
     <>
@@ -274,6 +400,20 @@ export default function App() {
                 apiMessage={apiMessage}
                 apiCheckedAt={apiCheckedAt}
                 onCheckApi={handleCheckApi}
+                invoiceList={invoiceList}
+                invoiceListStatus={invoiceListStatus}
+                listDisabled={isSaving || isLoading || isListingInvoices}
+                onRefreshInvoices={handleRefreshInvoices}
+                onLoadInvoice={handleLoadInvoice}
+                onDeleteInvoice={handleDeleteInvoice}
+                onNewInvoice={handleNewInvoice}
+                onRunDeleteApiTest={handleRunDeleteApiTest}
+                deleteApiTestDisabled={
+                  isSaving || isLoading || isListingInvoices || isDeleteTestRunning
+                }
+                isDeleteApiTestRunning={isDeleteTestRunning}
+                activeInvoiceId={invoiceId}
+                activeInvoiceActionId={activeInvoiceActionId}
               />
             ) : tab === "preview" ? (
               <Preview invoiceRef={invoiceRef} data={data} />
