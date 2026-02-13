@@ -298,6 +298,11 @@ export default function App() {
     setSaveStatus("New invoice form ready.");
   }, []);
 
+  const handleBackToAdmin = useCallback(() => {
+    setMode("admin");
+    setActiveMenu("dashboard");
+  }, []);
+
   const handleRunDeleteApiTest = useCallback(async () => {
     if (isDeleteTestRunning) return;
 
@@ -358,27 +363,45 @@ export default function App() {
   }, [handleCheckApi, handleRefreshInvoices]);
 
   return (
-    <>
-      {mode === "admin" ? (
-        <AdminLayout setMode={setMode} activeMenu={activeMenu} setActiveMenu={setActiveMenu}>
-          <AdminDashboard />
-        </AdminLayout>
-      ) : (
-        <div className="shell">
+    <AdminLayout
+      setMode={setMode}
+      activeMenu={activeMenu}
+      setActiveMenu={setActiveMenu}
+      contentClassName={mode === "invoice" ? "content-wrapper--finance" : ""}
+    >
+      {mode === "invoice" ? (
+        <div className="shell financeShellFull">
           <header className="topbar">
-            <div className="brand">Cashier Invoice</div>
+            <div className="topbarMainRow">
+              <div className="topbarBrandGroup">
+                <div className="brand">Cashier Invoice</div>
+                <div className="topbarBadge">Finance Console</div>
+              </div>
 
-            <Tabs tab={tab} setTab={setTab} />
+              <div className="topbarUtilityActions">
+                <button
+                  className="actionBtn topbarBackBtn"
+                  onClick={handleBackToAdmin}
+                  type="button"
+                >
+                  Back to Admin
+                </button>
 
-            <button
-              className="exportBtn"
-              onClick={exportPDF}
-              type="button"
-              disabled={isExporting}
-              title={isExporting ? "Exporting..." : "Export PDF"}
-            >
-              {isExporting ? "Exporting..." : "Export PDF"}
-            </button>
+                <button
+                  className="exportBtn"
+                  onClick={exportPDF}
+                  type="button"
+                  disabled={isExporting}
+                  title={isExporting ? "Exporting..." : "Export PDF"}
+                >
+                  {isExporting ? "Exporting..." : "Export PDF"}
+                </button>
+              </div>
+            </div>
+
+            <div className="topbarTabsRow">
+              <Tabs tab={tab} setTab={setTab} />
+            </div>
           </header>
 
           <main className="main">
@@ -428,7 +451,9 @@ export default function App() {
             )}
           </main>
         </div>
+      ) : (
+        <AdminDashboard />
       )}
-    </>
+    </AdminLayout>
   );
 }

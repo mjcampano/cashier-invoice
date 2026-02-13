@@ -32,6 +32,8 @@ export default function DataEntry({
 }) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isEditorLoading, setIsEditorLoading] = useState(false);
+  const [expandedItemIds, setExpandedItemIds] = useState({});
+  const [expandedPaymentIds, setExpandedPaymentIds] = useState({});
 
   const subTotal = useMemo(
     () =>
@@ -57,6 +59,7 @@ export default function DataEntry({
         : apiStatus === "error"
           ? "Offline"
           : "Unknown";
+  const hasSystemTools = Boolean(onCheckApi || onRunDeleteApiTest);
 
   const formatDateTime = (value) => {
     if (!value) return "-";
@@ -73,11 +76,14 @@ export default function DataEntry({
     setData((d) => ({ ...d, invoice: { ...d.invoice, [k]: v } }));
   const setNotes = (v) => setData((d) => ({ ...d, notes: v }));
 
-  const addItem = () =>
+  const addItem = () => {
+    const id = uid();
     setData((d) => ({
       ...d,
-      items: [...d.items, { id: uid(), description: "", qty: 1, unitPrice: 0 }],
+      items: [...d.items, { id, description: "", qty: 1, unitPrice: 0 }],
     }));
+    setExpandedItemIds((prev) => ({ ...prev, [id]: true }));
+  };
 
   const updateItem = (id, k, v) =>
     setData((d) => ({
@@ -85,17 +91,26 @@ export default function DataEntry({
       items: d.items.map((it) => (it.id === id ? { ...it, [k]: v } : it)),
     }));
 
-  const removeItem = (id) =>
+  const removeItem = (id) => {
     setData((d) => ({ ...d, items: d.items.filter((it) => it.id !== id) }));
+    setExpandedItemIds((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
 
-  const addPayment = () =>
+  const addPayment = () => {
+    const id = uid();
     setData((d) => ({
       ...d,
       payments: [
         ...d.payments,
-        { id: uid(), date: "", reference: "", method: "Cash", amount: 0 },
+        { id, date: "", reference: "", method: "Cash", amount: 0 },
       ],
     }));
+    setExpandedPaymentIds((prev) => ({ ...prev, [id]: true }));
+  };
 
   const updatePayment = (id, k, v) =>
     setData((d) => ({
@@ -103,8 +118,20 @@ export default function DataEntry({
       payments: d.payments.map((p) => (p.id === id ? { ...p, [k]: v } : p)),
     }));
 
-  const removePayment = (id) =>
+  const removePayment = (id) => {
     setData((d) => ({ ...d, payments: d.payments.filter((p) => p.id !== id) }));
+    setExpandedPaymentIds((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const toggleItemDetails = (id) =>
+    setExpandedItemIds((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const togglePaymentDetails = (id) =>
+    setExpandedPaymentIds((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const openNewEditor = () => {
     if (onNewInvoice) onNewInvoice();
@@ -143,59 +170,73 @@ export default function DataEntry({
   return (
     <div className="dataEntryPage">
       <section className="card">
-        <h3 className="h3">Invoice Records</h3>
-        <div className="smallMuted">
-          Manage student invoice records with a focused add/edit popup.
+        <div className="financeSectionHeader">
+          <div>
+            <h3 className="h3">Finance Records</h3>
+            <div className="smallMuted">
+              Manage student invoices with a cleaner admin workflow.
+            </div>
+          </div>
         </div>
 
-        <div className="dataEntryToolbar">
-          <button
-            className="actionBtn success"
-            onClick={openNewEditor}
-            type="button"
-            disabled={saveDisabled || isEditorLoading}
-          >
-            Add Student
-          </button>
-          {onLoadLatest && (
+        <div className="financeToolbar">
+          <div className="financeToolbarMain">
             <button
-              className="actionBtn"
-              onClick={openLatestInEditor}
+              className="actionBtn success financePrimaryAction"
+              onClick={openNewEditor}
               type="button"
-              disabled={loadDisabled || isEditorLoading}
+              disabled={saveDisabled || isEditorLoading}
             >
-              Open Latest
+              Add Student
             </button>
-          )}
-          {onRefreshInvoices && (
-            <button
-              className="actionBtn"
-              onClick={onRefreshInvoices}
-              type="button"
-              disabled={listDisabled || isEditorLoading}
-            >
-              Refresh List
-            </button>
-          )}
-          {onCheckApi && (
-            <button
-              className="actionBtn"
-              onClick={onCheckApi}
-              type="button"
-              disabled={apiStatus === "checking"}
-            >
-              Check API
-            </button>
-          )}
-          {onRunDeleteApiTest && (
-            <button
-              className="actionBtn warning"
-              onClick={onRunDeleteApiTest}
-              type="button"
-              disabled={deleteApiTestDisabled || isEditorLoading}
-            >
-              {isDeleteApiTestRunning ? "Testing Delete..." : "Test Delete API"}
-            </button>
+            {onLoadLatest && (
+              <button
+                className="actionBtn"
+                onClick={openLatestInEditor}
+                type="button"
+                disabled={loadDisabled || isEditorLoading}
+              >
+                Open Latest
+              </button>
+            )}
+            {onRefreshInvoices && (
+              <button
+                className="actionBtn"
+                onClick={onRefreshInvoices}
+                type="button"
+                disabled={listDisabled || isEditorLoading}
+              >
+                Refresh List
+              </button>
+            )}
+          </div>
+
+          {hasSystemTools && (
+            <details className="financeToolsPanel">
+              <summary className="financeToolsToggle">System Tools</summary>
+              <div className="financeToolsBody">
+                {onCheckApi && (
+                  <button
+                    className="actionBtn"
+                    onClick={onCheckApi}
+                    type="button"
+                    disabled={apiStatus === "checking"}
+                  >
+                    Check API
+                  </button>
+                )}
+                {onRunDeleteApiTest && (
+                  <button
+                    className="actionBtn warning"
+                    onClick={onRunDeleteApiTest}
+                    type="button"
+                    disabled={deleteApiTestDisabled || isEditorLoading}
+                  >
+                    {isDeleteApiTestRunning ? "Testing Delete..." : "Test Delete API"}
+                  </button>
+                )}
+              </div>
+            </details>
           )}
         </div>
 
@@ -249,7 +290,7 @@ export default function DataEntry({
                         <div className="savedInvoicesActions">
                           {onLoadInvoice && (
                             <button
-                              className="actionBtn"
+                              className="actionBtn tableActionBtn"
                               type="button"
                               onClick={() => openEditEditor(entry.id)}
                               disabled={listDisabled || isBusy}
@@ -259,7 +300,7 @@ export default function DataEntry({
                           )}
                           {onDeleteInvoice && (
                             <button
-                              className="dangerBtn"
+                              className="dangerBtn tableActionBtn"
                               type="button"
                               onClick={() => onDeleteInvoice(entry.id)}
                               disabled={listDisabled || isBusy}
@@ -290,9 +331,11 @@ export default function DataEntry({
                   Fill out the student profile, invoice details, items, and payments.
                 </div>
               </div>
-              <button className="actionBtn" onClick={closeEditor} type="button">
-                Close
-              </button>
+              <div className="invoiceEditorHeaderActions">
+                <button className="actionBtn" onClick={closeEditor} type="button">
+                  Back to Records
+                </button>
+              </div>
             </div>
 
             {isEditorLoading ? (
@@ -482,11 +525,22 @@ export default function DataEntry({
                   <hr className="hr" />
 
                   <h3 className="h3">Charges</h3>
-                  <div className="smallMuted">
-                    Subtotal: <b>{peso(subTotal)}</b> | Payments: <b>{peso(paymentsTotal)}</b> | Balance: <b>{peso(balance)}</b>
+                  <div className="financeSummaryGrid">
+                    <div className="financeSummaryCard">
+                      <div className="financeSummaryLabel">Subtotal</div>
+                      <div className="financeSummaryValue">{peso(subTotal)}</div>
+                    </div>
+                    <div className="financeSummaryCard">
+                      <div className="financeSummaryLabel">Payments</div>
+                      <div className="financeSummaryValue">{peso(paymentsTotal)}</div>
+                    </div>
+                    <div className={`financeSummaryCard ${balance > 0 ? "isDue" : "isSettled"}`}>
+                      <div className="financeSummaryLabel">Balance</div>
+                      <div className="financeSummaryValue">{peso(balance)}</div>
+                    </div>
                   </div>
 
-                  <div className="dataEntryToolbar" style={{ marginBottom: 10 }}>
+                  <div className="dataEntryToolbar financeActionBar">
                     <button className="smallBtn" onClick={addItem} type="button">
                       Add Item
                     </button>
@@ -520,103 +574,119 @@ export default function DataEntry({
                   </div>
 
                   <div style={{ display: "grid", gap: 10 }}>
-                    {data.items.map((it) => (
+                    {data.items.map((it, index) => {
+                      const amount = Number(it.qty || 0) * Number(it.unitPrice || 0);
+                      const isExpanded = Boolean(expandedItemIds[it.id]);
+
+                      return (
                       <div key={it.id} className="rowCard">
-                        <FormRow label="Description">
-                          <input
-                            className="input"
-                            value={it.description}
-                            onChange={(e) => updateItem(it.id, "description", e.target.value)}
-                          />
-                        </FormRow>
-
-                        <div className="row3">
-                          <FormRow label="Qty">
-                            <input
-                              className="input"
-                              type="number"
-                              value={it.qty}
-                              onChange={(e) => updateItem(it.id, "qty", e.target.value)}
-                            />
-                          </FormRow>
-                          <FormRow label="Unit Price">
-                            <input
-                              className="input"
-                              type="number"
-                              value={it.unitPrice}
-                              onChange={(e) => updateItem(it.id, "unitPrice", e.target.value)}
-                            />
-                          </FormRow>
-
-                          <div style={{ alignSelf: "end", textAlign: "right" }}>
-                            <div className="smallMuted">Amount</div>
-                            <div style={{ fontWeight: 800 }}>
-                              {peso(Number(it.qty || 0) * Number(it.unitPrice || 0))}
+                        <div className="compactRowHead">
+                          <div>
+                            <div className="compactRowTitle">
+                              {it.description || `Charge ${index + 1}`}
                             </div>
+                            <div className="compactRowMeta">
+                              Qty {it.qty || 0} x {peso(Number(it.unitPrice || 0))}
+                            </div>
+                          </div>
+                          <div className="compactRowAmountBlock">
+                            <div className="smallMuted">Amount</div>
+                            <div className="compactRowAmount">{peso(amount)}</div>
                           </div>
                         </div>
 
-                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                          <button className="dangerBtn" onClick={() => removeItem(it.id)} type="button">
+                        <div className="compactRowActions">
+                          <button
+                            className="actionBtn"
+                            onClick={() => toggleItemDetails(it.id)}
+                            type="button"
+                          >
+                            {isExpanded ? "Hide Details" : "Show Details"}
+                          </button>
+                          <button
+                            className="dangerBtn"
+                            onClick={() => removeItem(it.id)}
+                            type="button"
+                          >
                             Remove
                           </button>
                         </div>
+
+                        {isExpanded && (
+                          <div className="compactRowDetails">
+                            <FormRow label="Description">
+                              <input
+                                className="input"
+                                value={it.description}
+                                onChange={(e) => updateItem(it.id, "description", e.target.value)}
+                              />
+                            </FormRow>
+
+                            <div className="row3">
+                              <FormRow label="Qty">
+                                <input
+                                  className="input"
+                                  type="number"
+                                  value={it.qty}
+                                  onChange={(e) => updateItem(it.id, "qty", e.target.value)}
+                                />
+                              </FormRow>
+                              <FormRow label="Unit Price">
+                                <input
+                                  className="input"
+                                  type="number"
+                                  value={it.unitPrice}
+                                  onChange={(e) => updateItem(it.id, "unitPrice", e.target.value)}
+                                />
+                              </FormRow>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <hr className="hr" />
 
                   <h3 className="h3">Payments</h3>
-                  <button className="smallBtn" onClick={addPayment} type="button">
-                    Add Payment
-                  </button>
+                  <div className="dataEntryToolbar financeActionBar">
+                    <button className="smallBtn" onClick={addPayment} type="button">
+                      Add Payment
+                    </button>
+                  </div>
 
                   <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                    {data.payments.map((payment) => (
+                    {data.payments.map((payment, index) => {
+                      const isExpanded = Boolean(expandedPaymentIds[payment.id]);
+
+                      return (
                       <div key={payment.id} className="rowCard">
-                        <div className="row3">
-                          <FormRow label="Date">
-                            <input
-                              className="input"
-                              type="date"
-                              value={payment.date}
-                              onChange={(e) => updatePayment(payment.id, "date", e.target.value)}
-                            />
-                          </FormRow>
-                          <FormRow label="Reference">
-                            <input
-                              className="input"
-                              value={payment.reference}
-                              onChange={(e) =>
-                                updatePayment(payment.id, "reference", e.target.value)
-                              }
-                            />
-                          </FormRow>
-                          <FormRow label="Method">
-                            <select
-                              className="input"
-                              value={payment.method}
-                              onChange={(e) => updatePayment(payment.id, "method", e.target.value)}
-                            >
-                              <option>Cash</option>
-                              <option>GCash</option>
-                              <option>Bank Transfer</option>
-                              <option>Card</option>
-                            </select>
-                          </FormRow>
+                        <div className="compactRowHead">
+                          <div>
+                            <div className="compactRowTitle">
+                              {payment.reference || `Payment ${index + 1}`}
+                            </div>
+                            <div className="compactRowMeta">
+                              {payment.method || "Cash"} {payment.date ? `- ${payment.date}` : ""}
+                            </div>
+                          </div>
+                          <div className="compactRowAmountBlock">
+                            <div className="smallMuted">Amount</div>
+                            <div className="compactRowAmount">
+                              {peso(Number(payment.amount || 0))}
+                            </div>
+                          </div>
                         </div>
 
-                        <FormRow label="Amount">
-                          <input
-                            className="input"
-                            type="number"
-                            value={payment.amount}
-                            onChange={(e) => updatePayment(payment.id, "amount", e.target.value)}
-                          />
-                        </FormRow>
-
-                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <div className="compactRowActions">
+                          <button
+                            className="actionBtn"
+                            onClick={() => togglePaymentDetails(payment.id)}
+                            type="button"
+                          >
+                            {isExpanded ? "Hide Details" : "Show Details"}
+                          </button>
                           <button
                             className="dangerBtn"
                             onClick={() => removePayment(payment.id)}
@@ -625,8 +695,60 @@ export default function DataEntry({
                             Remove
                           </button>
                         </div>
+
+                        {isExpanded && (
+                          <div className="compactRowDetails">
+                            <div className="row3">
+                              <FormRow label="Date">
+                                <input
+                                  className="input"
+                                  type="date"
+                                  value={payment.date}
+                                  onChange={(e) =>
+                                    updatePayment(payment.id, "date", e.target.value)
+                                  }
+                                />
+                              </FormRow>
+                              <FormRow label="Reference">
+                                <input
+                                  className="input"
+                                  value={payment.reference}
+                                  onChange={(e) =>
+                                    updatePayment(payment.id, "reference", e.target.value)
+                                  }
+                                />
+                              </FormRow>
+                              <FormRow label="Method">
+                                <select
+                                  className="input"
+                                  value={payment.method}
+                                  onChange={(e) =>
+                                    updatePayment(payment.id, "method", e.target.value)
+                                  }
+                                >
+                                  <option>Cash</option>
+                                  <option>GCash</option>
+                                  <option>Bank Transfer</option>
+                                  <option>Card</option>
+                                </select>
+                              </FormRow>
+                            </div>
+
+                            <FormRow label="Amount">
+                              <input
+                                className="input"
+                                type="number"
+                                value={payment.amount}
+                                onChange={(e) =>
+                                  updatePayment(payment.id, "amount", e.target.value)
+                                }
+                              />
+                            </FormRow>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               </div>
@@ -646,3 +768,4 @@ function FormRow({ label, children }) {
     </label>
   );
 }
+
