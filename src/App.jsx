@@ -6,7 +6,7 @@ import DataEntry from "./pages/DataEntry";
 import Preview from "./pages/Preview";
 import ProofOfPayment from "./components/ProofOfPayment";
 import AdminLayout from "./layouts/AdminLayout";
-import AdminDashboard from "./pages/admin/Dashboard";
+import AdminWorkspace from "./features/admin/AdminWorkspace";
 
 import { PROGRAMS, buildSchoolItems } from "./data/tuitionTemplates";
 import { uid } from "./utils";
@@ -452,7 +452,7 @@ export default function App() {
           </main>
         </div>
       ) : (
-        <AdminDashboard />
+        <AdminWorkspace activeMenu={activeMenu} />
       )}
     </AdminLayout>
   );

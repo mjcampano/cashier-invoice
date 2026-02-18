@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import "../../styles/admin/dashboard.css";
 import "../../styles/admin/professional.css";
 
@@ -7,7 +7,6 @@ export default function AdminDashboard() {
   const [selectedDate, setSelectedDate] = useState(2);
   const [performanceFilter, setPerformanceFilter] = useState("semester");
   const [earningsFilter, setEarningsFilter] = useState("year");
-  const [isLoading, setIsLoading] = useState(false);
 
   // Calendar logic
   const getDaysInMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -15,8 +14,8 @@ export default function AdminDashboard() {
 
   const daysInMonth = getDaysInMonth(currentMonth);
   const firstDay = getFirstDayOfMonth(currentMonth);
-  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const emptyDays = Array.from({ length: firstDay }, (_, i) => null);
+  const daysArray = [...Array(daysInMonth).keys()].map((index) => index + 1);
+  const emptyDays = Array.from({ length: firstDay }, () => null);
 
   const monthName = currentMonth.toLocaleString("default", { month: "long", year: "numeric" });
 
