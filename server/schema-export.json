@@ -1,0 +1,160 @@
+{
+  "generatedAt": "2026-02-16T09:36:23.604Z",
+  "database": "test",
+  "targetDbNameOption": "test",
+  "sampleSizePerCollection": 200,
+  "collections": [
+    {
+      "name": "invoices",
+      "documentCount": 3,
+      "sampledDocuments": 3,
+      "metadata": {
+        "name": "invoices",
+        "type": "collection",
+        "info": {
+          "readOnly": false,
+          "uuid": "8c857e39-36ab-41ca-9c9d-d65a0a23e7a3"
+        },
+        "idIndex": {
+          "v": 2,
+          "key": {
+            "_id": 1
+          },
+          "name": "_id_"
+        },
+        "options": {}
+      },
+      "indexes": [
+        {
+          "v": 2,
+          "key": {
+            "_id": 1
+          },
+          "name": "_id_"
+        }
+      ],
+      "inferredFieldTypes": {
+        "__v": [
+          "number"
+        ],
+        "_id": [
+          "ObjectId"
+        ],
+        "createdAt": [
+          "Date"
+        ],
+        "data": [
+          "object"
+        ],
+        "data.business": [
+          "object"
+        ],
+        "data.business.address": [
+          "string"
+        ],
+        "data.business.name": [
+          "string"
+        ],
+        "data.business.phone": [
+          "string"
+        ],
+        "data.business.tin": [
+          "string"
+        ],
+        "data.customer": [
+          "object"
+        ],
+        "data.customer.accountNo": [
+          "string"
+        ],
+        "data.customer.address": [
+          "string"
+        ],
+        "data.customer.contact": [
+          "string"
+        ],
+        "data.customer.name": [
+          "string"
+        ],
+        "data.invoice": [
+          "object"
+        ],
+        "data.invoice.billingMonth": [
+          "string"
+        ],
+        "data.invoice.cashierId": [
+          "string"
+        ],
+        "data.invoice.cashierName": [
+          "string"
+        ],
+        "data.invoice.dateIssued": [
+          "string"
+        ],
+        "data.invoice.dueDate": [
+          "string"
+        ],
+        "data.invoice.statementNo": [
+          "string"
+        ],
+        "data.items": [
+          "array"
+        ],
+        "data.items[]": [
+          "object"
+        ],
+        "data.items[].description": [
+          "string"
+        ],
+        "data.items[].id": [
+          "string"
+        ],
+        "data.items[].qty": [
+          "number"
+        ],
+        "data.items[].unitPrice": [
+          "number"
+        ],
+        "data.notes": [
+          "string"
+        ],
+        "data.payments": [
+          "array"
+        ],
+        "data.payments[]": [
+          "object"
+        ],
+        "data.payments[].amount": [
+          "number"
+        ],
+        "data.payments[].date": [
+          "string"
+        ],
+        "data.payments[].id": [
+          "string"
+        ],
+        "data.payments[].method": [
+          "string"
+        ],
+        "data.payments[].proofStatus": [
+          "string"
+        ],
+        "data.payments[].reference": [
+          "string"
+        ],
+        "data.school": [
+          "object"
+        ],
+        "data.school.programKey": [
+          "string"
+        ],
+        "data.school.trackKey": [
+          "string"
+        ],
+        "updatedAt": [
+          "Date"
+        ]
+      }
+    }
+  ]
+}
