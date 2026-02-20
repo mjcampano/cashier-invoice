@@ -20,11 +20,41 @@ if (!resolveMongoUri()) {
   process.exit(1);
 }
 
+const parseCorsOrigins = () =>
+  (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const isOriginAllowed = (origin, allowedOrigins) => {
+  if (!origin) return true;
+  if (!allowedOrigins.length) return true;
+  if (allowedOrigins.includes("*")) return true;
+
+  return allowedOrigins.some((allowedOrigin) => {
+    if (allowedOrigin === origin) return true;
+    if (!allowedOrigin.includes("*")) return false;
+
+    const wildcardRegex = new RegExp(
+      `^${escapeRegex(allowedOrigin).replace(/\\\*/g, ".*")}$`
+    );
+    return wildcardRegex.test(origin);
+  });
+};
+
+const allowedOrigins = parseCorsOrigins();
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(",").map((v) => v.trim())
-      : "*",
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin, allowedOrigins)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origin not allowed by CORS: ${origin}`));
+    },
   })
 );
 app.use(express.json({ limit: "2mb" }));
