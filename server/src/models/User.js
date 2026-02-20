@@ -24,11 +24,6 @@ const UserSchema = new mongoose.Schema(
       phone: { type: String, trim: true, default: "" },
       avatarUrl: { type: String, trim: true, default: "" },
     },
-    teacherId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Teacher",
-      default: null,
-    },
     studentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Student",

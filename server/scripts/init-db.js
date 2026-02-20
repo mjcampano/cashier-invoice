@@ -22,11 +22,9 @@ const bootstrapDefaults = async () => {
         permissions: [
           "users.read",
           "users.write",
-          "teachers.manage",
           "students.manage",
           "classes.manage",
           "enrollments.manage",
-          "attendance.manage",
           "finance.manage",
           "notices.manage",
           "messages.manage",

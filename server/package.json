@@ -6,6 +6,7 @@
     "dev": "node src/index.js",
     "start": "node src/index.js",
     "init:db": "node scripts/init-db.js",
+    "db:import-students": "node scripts/import-seed-students.js",
     "db:list": "node scripts/list-databases.js",
     "db:check": "node scripts/check-db-connection.js",
     "db:export-schema": "node scripts/export-db-schema.js"
