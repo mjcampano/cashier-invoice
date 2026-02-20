@@ -1,4 +1,5 @@
 // src/components/ProofOfPayment.jsx
+/* eslint-disable no-useless-escape */
 import { useEffect, useMemo, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import Tesseract from "tesseract.js";
@@ -83,19 +84,12 @@ const ui = {
   },
 };
 
+const EMPTY_ITEMS = [];
+
 /**
  * ✅ Smart character cleanup for numbers:
  * Used specifically when extracting numbers to fix OCR misreads
  */
-function cleanNumberOCR(text = "") {
-  return text
-    .replace(/[lI|]/g, "1")     // l, I, | -> 1
-    .replace(/[O]/g, "0")        // O -> 0
-    .replace(/[S]/g, "5")        // S -> 5
-    .replace(/[Z]/g, "2")        // Z -> 2
-    .replace(/[B]/g, "8")        // B -> 8
-    .replace(/[G]/g, "9");       // G -> 9
-}
 
 /**
  * ✅ AMOUNT extraction (enhanced):
@@ -536,7 +530,7 @@ function extractDate(text = "") {
             return date.toISOString().slice(0, 10); // YYYY-MM-DD
           }
         }
-      } catch (e) {
+      } catch {
         // Skip on error
       }
     }
@@ -588,7 +582,7 @@ function extractTime(text = "") {
           // Format with leading zeros: HH:MM:SS
           return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
         }
-      } catch (e) {
+      } catch {
         // Skip on error
       }
     }
@@ -737,7 +731,6 @@ function extractPaymentMethod(text = "") {
  */
 function verifyAuthenticity(text = "", ocrConfidence = 0) {
   const t = normalizeOCR(text);
-  const lower = t.toLowerCase();
 
   const warnings = [];
   let authenticityScore = 0;
@@ -768,6 +761,14 @@ function verifyAuthenticity(text = "", ocrConfidence = 0) {
 
   if (hasRecipientOrFrom) authenticityScore += 10;
   else warnings.push("⚠️ No sender/recipient information found");
+
+  if (Number.isFinite(ocrConfidence)) {
+    if (ocrConfidence >= 85) authenticityScore += 10;
+    else if (ocrConfidence < 40) {
+      warnings.push("⚠️ OCR confidence is low");
+      authenticityScore -= 10;
+    }
+  }
 
   // 2. Check for suspicious patterns (fake indicators)
   const hasExcessiveNumbers = (t.match(/\d/g) || []).length > 100;
@@ -826,7 +827,7 @@ function verifyAuthenticity(text = "", ocrConfidence = 0) {
         warnings.push("⚠️ Receipt is more than 1 year old");
         authenticityScore -= 5;
       }
-    } catch (e) {
+    } catch {
       // Skip on error
     }
   }
@@ -861,7 +862,7 @@ export default function ProofOfPayment({
   onGoPreview,
 }) {
   // ✅ ATTACHED: Use App uploads as the source of truth
-  const items = Array.isArray(uploads) ? uploads : [];
+  const items = Array.isArray(uploads) ? uploads : EMPTY_ITEMS;
   const setItems = typeof setUploads === "function" ? setUploads : () => {};
   const [previewItem, setPreviewItem] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -1389,3 +1390,4 @@ export default function ProofOfPayment({
     </>
   );
 }
+

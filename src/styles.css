@@ -25,7 +25,7 @@ body {
     linear-gradient(120deg, #0b1221 0%, #0f172a 40%, #0b1221 100%);
   color: var(--text);
   min-height: 100vh;
-  padding: 24px;
+  padding: 0;
 }
 
 /* ====== Layout ====== */
@@ -43,17 +43,30 @@ body {
   backdrop-filter: blur(10px);
 }
 
+.financeShellFull {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  min-height: 100%;
+}
+
 .topbar {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: grid;
+  gap: 10px;
   padding: 14px 18px;
   background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
+}
+
+.topbarMainRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .brand {
@@ -61,6 +74,44 @@ body {
   font-size: 18px;
   letter-spacing: 0.4px;
   color: var(--primary-2);
+}
+
+.topbarBrandGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topbarBadge {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+}
+
+.topbarUtilityActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topbarTabsRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.topbarBackBtn {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border-color: #0f172a;
+  color: #fff;
 }
 
 .main {
@@ -73,34 +124,37 @@ body {
 
 .tabs {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-left: auto;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
 }
 
 .tabBtn {
-  padding: 9px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #f8fafc;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
   cursor: pointer;
   font-weight: 700;
   font-size: 13px;
-  color: var(--primary-2);
+  color: #334155;
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .tabBtn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.1);
   background: #eef2ff;
 }
 
 .tabBtn.active {
   background: var(--primary);
   color: #fff;
-  border-color: var(--primary-2);
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+  border-color: #1e40af;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
 }
 
 /* ====== Buttons ====== */
@@ -129,6 +183,17 @@ body {
 
 .dangerBtn { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 8px 16px rgba(239, 68, 68, 0.18); }
 .dangerBtn:hover { transform: translateY(-1px); }
+
+.exportBtn:disabled,
+.smallBtn:disabled,
+.dangerBtn:disabled,
+.actionBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
 
 /* Unified action buttons in forms */
 .actionBtn {
@@ -434,6 +499,228 @@ textarea::placeholder { color: #97a1b6; }
   line-height: 1.4;
 }
 
+.apiStatusRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 12px;
+}
+
+.apiStatusBadge {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  color: var(--muted);
+}
+
+.apiStatusBadge.ok {
+  background: #ecfdf3;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.apiStatusBadge.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.apiStatusBadge.checking {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.apiStatusTime {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dataEntryPage {
+  display: grid;
+  gap: 16px;
+}
+
+.financeSectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.financeToolbar {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.financeToolbarMain {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.financePrimaryAction {
+  min-width: 130px;
+}
+
+.financeToolsPanel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 4px 6px;
+  min-width: 160px;
+}
+
+.financeToolsToggle {
+  list-style: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.2px;
+  user-select: none;
+  padding: 6px 10px;
+}
+
+.financeToolsToggle::-webkit-details-marker {
+  display: none;
+}
+
+.financeToolsPanel[open] .financeToolsToggle {
+  color: #0f172a;
+}
+
+.financeToolsBody {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 6px 8px;
+}
+
+.dataEntryToolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.savedInvoicesTableWrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.savedInvoicesTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
+}
+
+.savedInvoicesTable th,
+.savedInvoicesTable td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  text-align: left;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.savedInvoicesTable th {
+  background: #f8fafc;
+  color: var(--primary-2);
+  font-weight: 800;
+}
+
+.savedInvoicesTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.savedInvoicesTable tbody tr.activeRow td {
+  background: #eef6ff;
+}
+
+.savedInvoicesActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tableActionBtn {
+  min-width: 80px;
+  justify-content: center;
+  text-align: center;
+}
+
+.invoiceEditorModalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 18, 33, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+}
+
+.invoiceEditorModal {
+  width: min(1400px, 100%);
+  max-height: 94vh;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.invoiceEditorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(120deg, #eef2ff, #f8fafc);
+}
+
+.invoiceEditorTitle {
+  margin: 0;
+  color: var(--primary-2);
+  font-size: 18px;
+}
+
+.invoiceEditorHeaderActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.invoiceEditorLoading {
+  padding: 24px 16px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.invoiceEditorBody {
+  padding: 16px;
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+}
+
 /* ====== Item Cards ====== */
 
 .rowCard {
@@ -442,6 +729,94 @@ textarea::placeholder { color: #97a1b6; }
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
   border: 1px solid var(--border);
   box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+}
+
+.financeSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.financeSummaryCard {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.financeSummaryCard.isDue {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.financeSummaryCard.isSettled {
+  background: #ecfdf3;
+  border-color: #bbf7d0;
+}
+
+.financeSummaryLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.financeSummaryValue {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.financeActionBar {
+  margin-bottom: 10px;
+}
+
+.compactRowHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compactRowTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.compactRowMeta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.compactRowAmountBlock {
+  text-align: right;
+  min-width: 110px;
+}
+
+.compactRowAmount {
+  font-size: 20px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.compactRowActions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compactRowDetails {
+  margin-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 10px;
 }
 
 .row3 {
@@ -475,5 +850,77 @@ textarea::placeholder { color: #97a1b6; }
 @media (min-width: 980px) {
   .grid { grid-template-columns: 1fr 1fr; }
   .row3 { grid-template-columns: 1fr 1fr 1fr; }
-  body { padding: 40px; }
+  .financeSummaryGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1100px) {
+  .invoiceEditorBody {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .topbarMainRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .topbarUtilityActions {
+    justify-content: stretch;
+  }
+
+  .topbarUtilityActions .topbarBackBtn,
+  .topbarUtilityActions .exportBtn {
+    flex: 1 1 150px;
+    text-align: center;
+  }
+
+  .topbarTabsRow .tabs {
+    width: 100%;
+  }
+
+  .topbarTabsRow .tabBtn {
+    flex: 1 1 140px;
+    text-align: center;
+  }
+
+  .financeToolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .financeToolbarMain .actionBtn {
+    flex: 1 1 130px;
+    text-align: center;
+  }
+
+  .financeToolsBody .actionBtn {
+    flex: 1 1 140px;
+    text-align: center;
+  }
+
+  .compactRowHead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .compactRowAmountBlock {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .compactRowActions .actionBtn,
+  .compactRowActions .dangerBtn {
+    flex: 1 1 140px;
+    text-align: center;
+  }
+
+  .savedInvoicesActions .tableActionBtn {
+    flex: 1 1 90px;
+  }
+
+  .invoiceEditorHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

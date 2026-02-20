@@ -1,4 +1,3 @@
-import { uid } from "./formatting";
 import { createWorker } from "tesseract.js";
 
 /**
@@ -87,7 +86,7 @@ export const parseOcrText = (text) => {
   const clean = text.replace(/\s+/g, " ").trim();
 
   // Reference: prefer number after "Reference Number"
-  const refLine = clean.match(/reference\s*(?:number|no\.)?[:\-]?\s*([A-Z0-9-]{4,})/i);
+  const refLine = clean.match(/reference\s*(?:number|no\.)?[:-]?\s*([A-Z0-9-]{4,})/i);
   const refAny = clean.match(/([A-Z0-9-]{10,})/);
   const reference = refLine ? refLine[1] : refAny ? refAny[1] : "";
 
