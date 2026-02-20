@@ -1,516 +1,863 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createStudent, listStudents, updateStudent } from "../../../api/adminRecords";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AdminTable from "../components/AdminTable";
 import DetailTabs from "../components/DetailTabs";
 import PageHeader from "../components/PageHeader";
 import StatusBadge from "../components/StatusBadge";
 import TablePagination from "../components/TablePagination";
-import TableToolbar from "../components/TableToolbar";
-import { seedStudents } from "../data/seedData";
-import {
-  buildComparator,
-  exportRowsToCsv,
-  paginateRows,
-  rowMatchesSearch,
-  toggleSelection,
-} from "../utils/tableHelpers";
+import { requirementTypes } from "../data/seedData";
+import { exportRowsToCsv, paginateRows, rowMatchesSearch } from "../utils/tableHelpers";
+import { createStudent, listStudents } from "../../../api/adminRecords";
 
 const studentTabs = [
-  { id: "profile", label: "Profile" },
-  { id: "history", label: "History" },
-  { id: "logs", label: "Logs" },
+  { id: "overview", label: "Overview" },
+  { id: "personal", label: "Personal Info" },
+  { id: "guardian", label: "Guardian & Emergency" },
+  { id: "enrollment", label: "Enrollment History" },
+  { id: "requirements", label: "Requirements" },
+  { id: "notes", label: "Notes" },
+  { id: "activity", label: "Activity Log" },
 ];
 
-const studentSortOptions = [
-  {
-    value: "newest",
-    label: "Newest",
-    compare: (a, b) => new Date(b.enrollmentDate) - new Date(a.enrollmentDate),
-  },
-  {
-    value: "name",
-    label: "Name",
-    compare: (a, b) => a.name.localeCompare(b.name),
-  },
-  {
-    value: "amount",
-    label: "Amount",
-    compare: (a, b) => (b.payments?.balance ?? 0) - (a.payments?.balance ?? 0),
-  },
+const requiredTypes = requirementTypes.filter((type) => type.isRequired);
+
+const editableStatusOptions = ["Active", "Inactive", "Graduated", "Pending", "Transferred"];
+const enrollmentStatusOptions = [
+  "Pending",
+  "Enrolled",
+  "Completed",
+  "Graduated",
+  "Withdrawn",
+  "Inactive",
 ];
 
-const blankStudentForm = {
-  name: "",
-  gradeYear: "",
-  sectionClass: "",
-  guardianContact: "",
-  status: "Active",
+const normalizeCsvHeader = (value) => {
+  const key = String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  if (!key) return "";
+  const headerMap = {
+    "student id": "studentId",
+    studentid: "studentId",
+    "full name": "fullName",
+    fullname: "fullName",
+    grade: "grade",
+    section: "section",
+    status: "status",
+    requirements: "requirementLabel",
+    "requirement label": "requirementLabel",
+    "last updated": "updatedAt",
+    "updated at": "updatedAt",
+  };
+  return headerMap[key] || key.replace(/\s+/g, "");
 };
 
-function formatDate(dateValue) {
-  if (!dateValue) return "-";
-  return new Date(dateValue).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+const parseCsvLine = (line) => {
+  const values = [];
+  let buffer = "";
+  let inQuotes = false;
 
-function toIsoDateString(dateValue) {
-  if (!dateValue) return "";
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
-}
-
-function normalizeStudentRow(student) {
-  const totalPaid = Number(student.payments?.totalPaid ?? 0);
-  const balance = Number(student.payments?.balance ?? 0);
-
-  return {
-    id: student._id || student.id || student.studentCode || "",
-    studentCode: student.studentCode || student.id || "-",
-    name: student.fullName || student.name || "",
-    gradeYear: student.gradeYear || "",
-    sectionClass: student.sectionClass || "",
-    guardianContact: student.guardianContact || "",
-    status: student.status || "Active",
-    enrollmentDate: toIsoDateString(
-      student.enrollmentDate || student.createdAt || new Date().toISOString()
-    ),
-    profile: {
-      birthDate: student.profile?.birthDate || "Not set",
-      address: student.profile?.address || "Not set",
-      adviser: student.profile?.adviser || "Not assigned",
-    },
-    payments: {
-      totalPaid: Number.isFinite(totalPaid) ? totalPaid : 0,
-      balance: Number.isFinite(balance) ? balance : 0,
-      lastPayment: toIsoDateString(student.payments?.lastPayment) || "",
-    },
-    attendance: {
-      rate: student.attendance?.rate || "N/A",
-      absences: Number.isFinite(student.attendance?.absences)
-        ? student.attendance.absences
-        : 0,
-    },
-    grades: {
-      average: student.grades?.average || "N/A",
-      standing: student.grades?.standing || "Pending",
-    },
-  };
-}
-
-function nextStudentCode(students) {
-  const highest = students.reduce((max, student) => {
-    const parsed = Number.parseInt(
-      String(student.studentCode || student.id || "").replace("STD-", ""),
-      10
-    );
-    return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
-  }, 2100);
-
-  return `STD-${highest + 1}`;
-}
-
-function highestStudentCode(students) {
-  return students.reduce((max, student) => {
-    const parsed = Number.parseInt(
-      String(student.studentCode || student.id || "").replace("STD-", ""),
-      10
-    );
-    return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
-  }, 2100);
-}
-
-function mapStudentToForm(student) {
-  return {
-    name: student.name,
-    gradeYear: student.gradeYear,
-    sectionClass: student.sectionClass,
-    guardianContact: student.guardianContact,
-    status: student.status,
-  };
-}
-
-function parseCsvRows(rawText) {
-  const lines = rawText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length < 2) {
-    return [];
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (line[i + 1] === '"') {
+          buffer += '"';
+          i += 1;
+          continue;
+        }
+        inQuotes = false;
+        continue;
+      }
+      buffer += char;
+      continue;
+    }
+    if (char === ',') {
+      values.push(buffer);
+      buffer = "";
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = true;
+      continue;
+    }
+    buffer += char;
   }
 
-  const headers = lines[0].split(",").map((header) => header.trim().toLowerCase());
-  const index = {
-    studentCode: headers.findIndex((header) =>
-      ["student id", "student code", "studentid", "id", "code"].includes(header)
-    ),
-    name: headers.findIndex((header) => ["name", "student name", "full name"].includes(header)),
-    gradeYear: headers.findIndex((header) => ["grade/year", "grade", "year"].includes(header)),
-    sectionClass: headers.findIndex((header) => ["section/class", "section", "class"].includes(header)),
-    guardianContact: headers.findIndex((header) =>
-      ["guardian contact", "guardian", "contact"].includes(header)
-    ),
+  values.push(buffer);
+  return values;
+};
+
+const parseCsvRecords = (text) => {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const headerLineIndex = lines.findIndex((line) => line.trim());
+  if (headerLineIndex === -1) return [];
+
+  const headers = parseCsvLine(lines[headerLineIndex]);
+  const records = [];
+
+  for (let i = headerLineIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const cells = parseCsvLine(line);
+    const record = {};
+    headers.forEach((header, index) => {
+      const key = normalizeCsvHeader(header);
+      if (!key) return;
+      record[key] = cells[index] ?? "";
+    });
+    if (Object.keys(record).length) {
+      records.push(record);
+    }
+  }
+
+  return records;
+};
+
+const parseIsoDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const splitFullName = (value) => {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return { firstName: "", middleName: "", lastName: "" };
+  }
+  if (normalized.includes(",")) {
+    const [last, rest] = normalized.split(",", 2);
+    const parts = rest.trim().split(/\s+/).filter(Boolean);
+    const firstName = parts.shift() || "";
+    const middleName = parts.join(" ");
+    return { firstName, middleName, lastName: last.trim() };
+  }
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  const firstName = parts[0] || "";
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : "";
+  const middleName = parts.length > 2 ? parts.slice(1, -1).join(" ") : "";
+  return { firstName, middleName, lastName };
+};
+
+const buildImportedStudent = (row, studentCode, blankStudent) => {
+  const { firstName, middleName, lastName } = splitFullName(
+    row.fullName || blankStudent.fullName
+  );
+  const normalizedName = (row.fullName || blankStudent.fullName || "").trim();
+  const nowIso = new Date().toISOString();
+  return {
+    ...blankStudent,
+    id: studentCode,
+    studentCode,
+    fullName: normalizedName || blankStudent.fullName,
+    firstName: firstName || blankStudent.firstName,
+    middleName: middleName || blankStudent.middleName,
+    lastName: lastName || blankStudent.lastName,
+    status: row.status || blankStudent.status,
+    currentEnrollment: {
+      ...blankStudent.currentEnrollment,
+      gradeLevel: row.grade || blankStudent.currentEnrollment.gradeLevel,
+      section: row.section || blankStudent.currentEnrollment.section,
+    },
+    updatedAt: parseIsoDate(row.updatedAt) || blankStudent.updatedAt,
+    notes: [
+      {
+        id: `NOTE-${studentCode}-import`,
+        note: "Imported from CSV.",
+        createdAt: nowIso,
+        createdBy: "Admin",
+      },
+      ...(blankStudent.notes || []),
+    ],
+    activityLog: [
+      {
+        id: `ACT-${studentCode}-import`,
+        action: "import",
+        details: "Student record imported from CSV.",
+        createdAt: nowIso,
+        actor: "Admin",
+      },
+      ...(blankStudent.activityLog || []),
+    ],
+  };
+};
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const normalizeName = (student) => student.fullName || student.name || "Unknown Student";
+const getStudentId = (student) => student.studentCode || student.id;
+const getGrade = (student) => student.currentEnrollment?.gradeLevel || "Not Set";
+const getSection = (student) => student.currentEnrollment?.section || "Not Set";
+
+const getRequirement = (student, typeId) =>
+  (student.requirements || []).find((item) => item.requirementTypeId === typeId) || {
+    requirementTypeId: typeId,
+    status: "Pending",
+    verifiedAt: null,
+    notes: "",
+    documents: [],
   };
 
-  return lines.slice(1).map((line, lineIndex) => {
-    const columns = line.split(",").map((column) => column.trim());
+const getMissingCount = (student) =>
+  requiredTypes.reduce((count, type) => {
+    const requirement = getRequirement(student, type.id);
+    return requirement.status === "Verified" ? count : count + 1;
+  }, 0);
+
+const getPrimaryGuardian = (student) =>
+  (student.guardians || []).find((guardian) => guardian.isPrimary) || student.guardians?.[0] || null;
+
+const getRows = (students) =>
+  students.map((student) => {
+    const missingRequirements = getMissingCount(student);
     return {
-      studentCode: columns[index.studentCode] || `CSV-${lineIndex + 1}`,
-      name: columns[index.name] || "Unknown Student",
-      gradeYear: columns[index.gradeYear] || "Not Set",
-      sectionClass: columns[index.sectionClass] || "Not Set",
-      guardianContact: columns[index.guardianContact] || "Not Set",
+      rowId: getStudentId(student),
+      student,
+      studentId: getStudentId(student),
+      fullName: normalizeName(student),
+      grade: getGrade(student),
+      section: getSection(student),
+      gradeSection: `${getGrade(student)} - ${getSection(student)}`,
+      status: student.status || "Active",
+      missingRequirements,
+      requirementLabel: missingRequirements === 0 ? "Complete" : `Missing ${missingRequirements}`,
+      updatedAt: student.updatedAt || student.createdAt || null,
     };
   });
-}
+
+const nextStudentId = (students) => {
+  const maxCode = students.reduce((max, student) => {
+    const parsed = Number.parseInt(String(getStudentId(student)).replace(/\D/g, ""), 10);
+    return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+  }, 2100);
+
+  return `STD-${maxCode + 1}`;
+};
+
+const createBlankStudent = (students) => {
+  const studentCode = nextStudentId(students);
+  const now = new Date().toISOString();
+  return {
+    id: studentCode,
+    studentCode,
+    firstName: "New",
+    middleName: "",
+    lastName: "Student",
+    suffix: "",
+    fullName: `New Student ${studentCode.replace("STD-", "")}`,
+    birthdate: "",
+    sex: "",
+    address: "",
+    phone: "",
+    email: "",
+    photoUrl: "",
+    status: "Active",
+    createdAt: now,
+    updatedAt: now,
+    guardianContact: "",
+    currentEnrollment: {
+      academicYear: "2025-2026",
+      gradeLevel: "Not Set",
+      section: "Not Set",
+      enrollmentStatus: "Pending",
+      enrolledAt: "",
+      remarks: "Record created from dashboard",
+    },
+    guardians: [],
+    emergencyContact: {
+      fullName: "",
+      relationship: "",
+      phone: "",
+      email: "",
+    },
+    enrollmentHistory: [],
+    requirements: requiredTypes.map((type) => ({
+      requirementTypeId: type.id,
+      status: "Pending",
+      verifiedAt: null,
+      notes: "",
+      documents: [],
+    })),
+    notes: [
+      {
+        id: `NOTE-${studentCode}-1`,
+        note: "Record created from Students page.",
+        createdAt: now,
+        createdBy: "Admin",
+      },
+    ],
+    activityLog: [
+      {
+        id: `ACT-${studentCode}-1`,
+        action: "create",
+        details: "Student record created.",
+        createdAt: now,
+        actor: "Admin",
+      },
+    ],
+  };
+};
+
+const blankGuardianForm = {
+  fullName: "",
+  relationship: "",
+  phone: "",
+  email: "",
+  address: "",
+  isPrimary: false,
+};
+
+const buildGuardianContactLabel = (guardians = []) => {
+  if (!guardians.length) return "";
+  const primary = guardians.find((guardian) => guardian.isPrimary) || guardians[0];
+  const name = primary.fullName || "Guardian";
+  const phone = primary.phone || "No phone";
+  return `${name} - ${phone}`;
+};
+
+const normalizeBackendStudent = (student) => {
+  if (!student) return null;
+  const studentCode = student.studentCode || student.studentId || student.id || student._id || "";
+  const createdAt = student.createdAt || student.enrollmentDate || null;
+  const updatedAt = student.updatedAt || createdAt;
+  const enrollment = {
+    academicYear: student.academicYear || "2025-2026",
+    gradeLevel: student.gradeYear || student.currentEnrollment?.gradeLevel || "Not Set",
+    section: student.sectionClass || student.currentEnrollment?.section || "Not Set",
+    enrollmentStatus:
+      student.enrollmentStatus || student.currentEnrollment?.enrollmentStatus || "Enrolled",
+    enrolledAt:
+      student.enrollmentDate || student.currentEnrollment?.enrolledAt || createdAt || "",
+    remarks: student.currentEnrollment?.remarks || "",
+  };
+
+  return {
+    id: student._id || student.id || studentCode,
+    studentCode,
+    fullName: student.fullName || `Student ${studentCode || "Untitled"}`,
+    firstName: student.firstName || "",
+    middleName: student.middleName || "",
+    lastName: student.lastName || "",
+    birthdate: student.birthdate || "",
+    sex: student.sex || "",
+    address: student.address || "",
+    phone: student.phone || "",
+    email: student.email || "",
+    photoUrl: student.photoUrl || "",
+    guardianContact: student.guardianContact || "",
+    status: student.status || "Active",
+    createdAt,
+    updatedAt,
+    currentEnrollment: enrollment,
+    guardians: student.guardians || [],
+    emergencyContact: student.emergencyContact || {},
+    enrollmentHistory: student.enrollmentHistory || [],
+    requirements: student.requirements || [],
+    notes: student.notes || [],
+    activityLog: student.activityLog || [],
+  };
+};
 
 export default function StudentsPage() {
   const [students, setStudents] = useState([]);
   const [view, setView] = useState("table");
-  const [formMode, setFormMode] = useState("add");
   const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [activeTab, setActiveTab] = useState("profile");
-  const [formData, setFormData] = useState(blankStudentForm);
-  const [importText, setImportText] = useState("");
-  const [importFileName, setImportFileName] = useState("");
-  const [importStep, setImportStep] = useState("upload");
-  const [validatedRows, setValidatedRows] = useState([]);
-  const [importError, setImportError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [gradeFilter, setGradeFilter] = useState("all");
   const [sectionFilter, setSectionFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("");
-  const [sortValue, setSortValue] = useState("newest");
-  const [pageSize, setPageSize] = useState(10);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [missingOnly, setMissingOnly] = useState(false);
   const [page, setPage] = useState(1);
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [pageSize, setPageSize] = useState(10);
+  const fileInputRef = useRef(null);
+  const [importStatus, setImportStatus] = useState("");
+  const [addStatus, setAddStatus] = useState("");
+  const [addError, setAddError] = useState("");
+  const [isAddingStudent, setIsAddingStudent] = useState(false);
+  const [isFetchingStudents, setIsFetchingStudents] = useState(true);
+  const [fetchError, setFetchError] = useState("");
+  const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const [personalEditSnapshot, setPersonalEditSnapshot] = useState(null);
+  const [isEditingGuardian, setIsEditingGuardian] = useState(false);
+  const [guardianForm, setGuardianForm] = useState(blankGuardianForm);
+  const [editingGuardianIndex, setEditingGuardianIndex] = useState(null);
+  const [guardianMessage, setGuardianMessage] = useState("");
+  const requirementFileInputRef = useRef(null);
+  const [requirementUploadMessage, setRequirementUploadMessage] = useState("");
+  const [activeRequirementUploadId, setActiveRequirementUploadId] = useState(null);
 
-  const loadStudents = useCallback(async (preferredStudentId = "") => {
-    setIsLoading(true);
-    setLoadError("");
+  const fetchStudents = useCallback(async () => {
+    setFetchError("");
+    setIsFetchingStudents(true);
 
     try {
-      const response = await listStudents({ limit: 500 });
-      const rows = Array.isArray(response?.items)
-        ? response.items.map(normalizeStudentRow)
-        : [];
+      const response = await listStudents({ limit: 200 });
+      const items = Array.isArray(response?.items) ? response.items : [];
+      const normalized = items.map(normalizeBackendStudent).filter(Boolean);
 
-      setStudents(rows);
-      setSelectedIds((current) => {
-        const valid = new Set(rows.map((student) => student.id));
-        return new Set([...current].filter((id) => valid.has(id)));
-      });
-      setSelectedStudentId((current) => {
-        const candidate = preferredStudentId || current;
-        if (candidate && rows.some((student) => student.id === candidate)) {
-          return candidate;
-        }
-        return rows[0]?.id || "";
-      });
+      if (normalized.length) {
+        setStudents(normalized);
+        setSelectedStudentId((currentId) => {
+          const hasCurrent = normalized.some((student) => getStudentId(student) === currentId);
+          return hasCurrent ? currentId : getStudentId(normalized[0]);
+        });
+      } else if (items.length === 0) {
+        setStudents([]);
+      }
     } catch (error) {
-      const fallbackRows = seedStudents.map(normalizeStudentRow);
-      setStudents(fallbackRows);
-      setSelectedIds((current) => {
-        const valid = new Set(fallbackRows.map((student) => student.id));
-        return new Set([...current].filter((id) => valid.has(id)));
-      });
-      setSelectedStudentId((current) => {
-        if (current && fallbackRows.some((student) => student.id === current)) {
-          return current;
-        }
-        return fallbackRows[0]?.id || "";
-      });
-      setLoadError(error?.message || "Failed to load students from backend. Showing local data.");
+      console.error("List students error:", error);
+      setFetchError(error?.message || "Unable to load students.");
     } finally {
-      setIsLoading(false);
+      setIsFetchingStudents(false);
     }
   }, []);
 
   useEffect(() => {
-    loadStudents();
-  }, [loadStudents]);
+    fetchStudents();
+  }, [fetchStudents]);
+
+  useEffect(() => {
+    if (view !== "profile") {
+      setIsEditingPersonal(false);
+      setPersonalEditSnapshot(null);
+      setIsEditingGuardian(false);
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (activeTab !== "guardian") {
+      setIsEditingGuardian(false);
+    }
+  }, [activeTab]);
+
+  const rows = useMemo(() => getRows(students), [students]);
+
+  const filteredRows = useMemo(() => {
+    return rows
+      .filter((row) => rowMatchesSearch(row, ["studentId", "fullName"], searchTerm))
+      .filter((row) => (gradeFilter === "all" ? true : row.grade === gradeFilter))
+      .filter((row) => (sectionFilter === "all" ? true : row.section === sectionFilter))
+      .filter((row) => (statusFilter === "all" ? true : row.status === statusFilter))
+      .filter((row) => (missingOnly ? row.missingRequirements > 0 : true));
+  }, [rows, searchTerm, gradeFilter, sectionFilter, statusFilter, missingOnly]);
+
+  const gradeOptions = useMemo(
+    () => [...new Set(rows.map((row) => row.grade).filter(Boolean))],
+    [rows]
+  );
+  const sectionOptions = useMemo(
+    () => [...new Set(rows.map((row) => row.section).filter(Boolean))],
+    [rows]
+  );
+  const statusOptions = useMemo(
+    () => [...new Set(rows.map((row) => row.status).filter(Boolean))],
+    [rows]
+  );
+
+  const { pageRows, totalPages, currentPage } = paginateRows(filteredRows, page, pageSize);
 
   const selectedStudent = useMemo(
-    () => students.find((student) => student.id === selectedStudentId) || null,
-    [selectedStudentId, students]
+    () => students.find((student) => getStudentId(student) === selectedStudentId) || null,
+    [students, selectedStudentId]
   );
+  const currentStudentId = selectedStudent ? getStudentId(selectedStudent) : null;
 
-  const sectionOptions = useMemo(
-    () => [...new Set(students.map((student) => student.sectionClass).filter(Boolean))],
-    [students]
-  );
+  useEffect(() => {
+    setGuardianForm(blankGuardianForm);
+    setEditingGuardianIndex(null);
+    setGuardianMessage("");
+    setRequirementUploadMessage("");
+    setActiveRequirementUploadId(null);
+  }, [currentStudentId]);
 
-  const filteredStudents = useMemo(() => {
-    const comparator = buildComparator(sortValue, studentSortOptions);
-    return [...students]
-      .filter((student) =>
-        rowMatchesSearch(
-          student,
-          ["studentCode", "name", "gradeYear", "sectionClass", "guardianContact"],
-          searchTerm
-        )
-      )
-      .filter((student) => (statusFilter === "all" ? true : student.status === statusFilter))
-      .filter((student) => (sectionFilter === "all" ? true : student.sectionClass === sectionFilter))
-      .filter((student) => (dateFilter ? student.enrollmentDate === dateFilter : true))
-      .sort(comparator);
-  }, [students, searchTerm, statusFilter, sectionFilter, dateFilter, sortValue]);
+  const handleStudentUpdate = (studentId, patch) => {
+    setStudents((currentStudents) =>
+      currentStudents.map((student) => {
+        if (getStudentId(student) !== studentId) return student;
+        const updated = {
+          ...student,
+          ...patch,
+          updatedAt: new Date().toISOString(),
+        };
 
-  const { pageRows: pagedStudents, totalPages, currentPage } = paginateRows(
-    filteredStudents,
-    page,
-    pageSize
-  );
+        if ("firstName" in patch || "middleName" in patch || "lastName" in patch) {
+          const firstName = patch.firstName ?? updated.firstName;
+          const middleName = patch.middleName ?? updated.middleName;
+          const lastName = patch.lastName ?? updated.lastName;
+          const parts = [firstName, middleName, lastName].filter(Boolean);
+          updated.fullName = parts.join(" ") || updated.fullName;
+        }
 
-  const allVisibleSelected =
-    pagedStudents.length > 0 && pagedStudents.every((student) => selectedIds.has(student.id));
-
-  const resetImportFlow = () => {
-    setImportText("");
-    setImportFileName("");
-    setImportStep("upload");
-    setValidatedRows([]);
-    setImportError("");
-  };
-
-  const handleOpenView = (studentId) => {
-    setSelectedStudentId(studentId);
-    setActiveTab("profile");
-    setView("view");
-  };
-
-  const handleOpenEdit = (student) => {
-    setFormMode("edit");
-    setSelectedStudentId(student.id);
-    setFormData(mapStudentToForm(student));
-    setView("form");
-  };
-
-  const handleOpenAdd = () => {
-    setFormMode("add");
-    setFormData(blankStudentForm);
-    setView("form");
-  };
-
-  const handleArchiveStudent = async (studentId) => {
-    const current = students.find((student) => student.id === studentId);
-    if (!current) return;
-
-    const nextStatus = current.status === "Archived" ? "Active" : "Archived";
-
-    try {
-      await updateStudent(studentId, { status: nextStatus });
-      setStudents((currentStudents) =>
-        currentStudents.map((student) =>
-          student.id === studentId
-            ? {
-                ...student,
-                status: nextStatus,
-              }
-            : student
-        )
-      );
-      setLoadError("");
-    } catch (error) {
-      setLoadError(error?.message || "Failed to update student status.");
-    }
-  };
-
-  const handleBulkArchive = async () => {
-    if (!selectedIds.size) return;
-    const ids = [...selectedIds];
-
-    try {
-      await Promise.all(ids.map((id) => updateStudent(id, { status: "Archived" })));
-      setStudents((currentStudents) =>
-        currentStudents.map((student) =>
-          ids.includes(student.id) ? { ...student, status: "Archived" } : student
-        )
-      );
-      setSelectedIds(new Set());
-      setLoadError("");
-    } catch (error) {
-      setLoadError(error?.message || "Failed to archive selected students.");
-    }
-  };
-
-  const handleBulkPublish = async () => {
-    if (!selectedIds.size) return;
-    const ids = [...selectedIds];
-
-    try {
-      await Promise.all(ids.map((id) => updateStudent(id, { status: "Active" })));
-      setStudents((currentStudents) =>
-        currentStudents.map((student) =>
-          ids.includes(student.id) ? { ...student, status: "Active" } : student
-        )
-      );
-      setSelectedIds(new Set());
-      setLoadError("");
-    } catch (error) {
-      setLoadError(error?.message || "Failed to publish selected students.");
-    }
-  };
-
-  const handleBulkExport = () => {
-    if (!selectedIds.size) return;
-    exportRowsToCsv(
-      "students-export.csv",
-      students.filter((student) => selectedIds.has(student.id)),
-      [
-        { key: "studentCode", label: "Student ID" },
-        { key: "name", label: "Name" },
-        { key: "gradeYear", label: "Grade/Year" },
-        { key: "sectionClass", label: "Section/Class" },
-        { key: "guardianContact", label: "Guardian Contact" },
-        { key: "status", label: "Status" },
-        { key: "enrollmentDate", label: "Enrollment Date" },
-      ]
+        return updated;
+      })
     );
   };
 
-  const handleSaveStudent = async (event) => {
-    event.preventDefault();
+  const resetGuardianForm = () => {
+    setGuardianForm(blankGuardianForm);
+    setEditingGuardianIndex(null);
+    setGuardianMessage("");
+  };
+
+  const handleGuardianFormChange = (field, value) => {
+    setGuardianForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleGuardianSave = () => {
+    if (!selectedStudent || !currentStudentId) return;
+    if (!guardianForm.fullName.trim()) {
+      setGuardianMessage("Please enter guardian name.");
+      return;
+    }
+
+    const nextGuardians = (selectedStudent.guardians || []).map((guardian) => ({
+      ...guardian,
+    }));
+
+    const normalized = {
+      fullName: guardianForm.fullName.trim(),
+      relationship: guardianForm.relationship.trim(),
+      phone: guardianForm.phone.trim(),
+      email: guardianForm.email.trim(),
+      address: guardianForm.address.trim(),
+      isPrimary: Boolean(guardianForm.isPrimary),
+    };
+
+    if (normalized.isPrimary) {
+      nextGuardians.forEach((guardian) => {
+        guardian.isPrimary = false;
+      });
+    }
+
+    if (editingGuardianIndex !== null && nextGuardians[editingGuardianIndex]) {
+      nextGuardians[editingGuardianIndex] = normalized;
+    } else {
+      nextGuardians.push(normalized);
+    }
+
+    if (!nextGuardians.some((guardian) => guardian.isPrimary) && nextGuardians.length) {
+      nextGuardians[0].isPrimary = true;
+    }
+
+    handleStudentUpdate(currentStudentId, {
+      guardians: nextGuardians,
+      guardianContact: buildGuardianContactLabel(nextGuardians),
+    });
+
+    setGuardianMessage("Guardian saved.");
+    resetGuardianForm();
+  };
+
+  const handleEditGuardian = (index) => {
+    if (!selectedStudent) return;
+    const guardian = (selectedStudent.guardians || [])[index];
+    if (!guardian) return;
+    setGuardianForm({ ...guardian });
+    setEditingGuardianIndex(index);
+    setGuardianMessage("");
+  };
+
+  const handleSetPrimaryGuardian = (index) => {
+    if (!selectedStudent || !currentStudentId) return;
+    const nextGuardians = (selectedStudent.guardians || []).map((guardian, guardianIndex) => ({
+      ...guardian,
+      isPrimary: guardianIndex === index,
+    }));
+    handleStudentUpdate(currentStudentId, {
+      guardians: nextGuardians,
+      guardianContact: buildGuardianContactLabel(nextGuardians),
+    });
+  };
+
+  const handleEmergencyFieldChange = (field, value) => {
+    if (!currentStudentId || !selectedStudent) return;
+    const nextEmergency = { ...(selectedStudent.emergencyContact || {}) };
+    nextEmergency[field] = value;
+    handleStudentUpdate(currentStudentId, {
+      emergencyContact: nextEmergency,
+    });
+  };
+
+  const handleRequirementUploadClick = (typeId) => {
+    setActiveRequirementUploadId(typeId);
+    setRequirementUploadMessage("");
+    requirementFileInputRef.current?.click();
+  };
+
+  const handleRequirementFileChange = (event) => {
+    const file = event.target?.files?.[0];
+    if (!file || !selectedStudent || !currentStudentId || !activeRequirementUploadId) {
+      if (event.target) {
+        event.target.value = "";
+      }
+      setActiveRequirementUploadId(null);
+      return;
+    }
+
+    const typeMeta = requiredTypes.find((type) => type.id === activeRequirementUploadId);
+    const now = new Date().toISOString();
+    const documentEntry = {
+      id: `DOC-${currentStudentId}-${activeRequirementUploadId}-${Date.now()}`,
+      fileName: file.name,
+      fileType: file.type,
+      uploadedAt: now,
+    };
+
+    const nextRequirements = requiredTypes.map((type) => {
+      const existing = (selectedStudent.requirements || []).find(
+        (requirement) => requirement.requirementTypeId === type.id
+      );
+      if (type.id !== activeRequirementUploadId) {
+        return existing
+          ? { ...existing, documents: [...(existing.documents || [])] }
+          : {
+              requirementTypeId: type.id,
+              status: "Pending",
+              verifiedAt: null,
+              notes: "",
+              documents: [],
+            };
+      }
+
+      const documents = [...(existing?.documents || []), documentEntry];
+      const status = existing?.status === "Verified" ? "Verified" : "Submitted";
+      return {
+        requirementTypeId: type.id,
+        status,
+        verifiedAt: existing?.verifiedAt || null,
+        notes: existing?.notes || "",
+        documents,
+      };
+    });
+
+    const activityEntry = {
+      id: `ACT-${currentStudentId}-${Date.now()}`,
+      action: "upload",
+      details: `Uploaded ${file.name} for ${typeMeta?.name || "requirement"}`,
+      createdAt: now,
+      actor: "Admin",
+    };
+
+    handleStudentUpdate(currentStudentId, {
+      requirements: nextRequirements,
+      activityLog: [...(selectedStudent.activityLog || []), activityEntry],
+    });
+
+    setRequirementUploadMessage(`Uploaded ${file.name}`);
+    setActiveRequirementUploadId(null);
+    if (event.target) {
+      event.target.value = "";
+    }
+  };
+
+  const handlePersonalFieldChange = (field, value) => {
+    if (!currentStudentId) return;
+    handleStudentUpdate(currentStudentId, { [field]: value });
+  };
+
+  const handleEnrollmentChange = (field, value) => {
+    if (!currentStudentId) return;
+    const enrollment = selectedStudent?.currentEnrollment || {};
+    handleStudentUpdate(currentStudentId, {
+      currentEnrollment: { ...enrollment, [field]: value },
+    });
+  };
+
+  const beginPersonalEditForStudent = (student) => {
+    if (!student) return;
+    setPersonalEditSnapshot(JSON.parse(JSON.stringify(student)));
+    setIsEditingPersonal(true);
+  };
+
+  const startPersonalEdit = () => {
+    if (!selectedStudent) return;
+    setActiveTab("personal");
+    beginPersonalEditForStudent(selectedStudent);
+    setIsEditingGuardian(false);
+  };
+
+  const handleStartEdit = () => {
+    if (!selectedStudent) return;
+    if (activeTab === "guardian") {
+      setIsEditingGuardian(true);
+      setIsEditingPersonal(false);
+      setPersonalEditSnapshot(null);
+      setGuardianForm(blankGuardianForm);
+      setEditingGuardianIndex(null);
+      return;
+    }
+    startPersonalEdit();
+  };
+
+  const handleSavePersonal = () => {
+    setIsEditingPersonal(false);
+    setPersonalEditSnapshot(null);
+  };
+
+  const handleCancelPersonalEdit = () => {
+    if (personalEditSnapshot) {
+      const snapshotId = getStudentId(personalEditSnapshot);
+      const snapshotCopy = JSON.parse(JSON.stringify(personalEditSnapshot));
+      setStudents((currentStudents) =>
+        currentStudents.map((student) =>
+          getStudentId(student) === snapshotId ? snapshotCopy : student
+        )
+      );
+    }
+    setIsEditingPersonal(false);
+    setPersonalEditSnapshot(null);
+  };
+
+  const openStudentProfile = (studentId, tabId = "overview") => {
+    setSelectedStudentId(studentId);
+    setActiveTab(tabId);
+    setView("profile");
+    setIsEditingPersonal(false);
+    setPersonalEditSnapshot(null);
+  };
+
+  const archiveStudent = (studentId) => {
+    const now = new Date().toISOString();
+    setStudents((currentStudents) =>
+      currentStudents.map((student) =>
+        getStudentId(student) === studentId
+          ? {
+              ...student,
+              status: "Inactive",
+              updatedAt: now,
+              activityLog: [
+                {
+                  id: `ACT-${studentId}-${Date.now()}`,
+                  action: "archive",
+                  details: "Student archived from Students list.",
+                  createdAt: now,
+                  actor: "Admin",
+                },
+                ...(student.activityLog || []),
+              ],
+            }
+          : student
+      )
+    );
+  };
+
+  const handleAddStudent = async () => {
+    const newStudent = createBlankStudent(students);
+    setStudents((currentStudents) => [newStudent, ...currentStudents]);
+    setPage(1);
+    setAddStatus("Saving new student...");
+    setAddError("");
+    setIsAddingStudent(true);
+    openStudentProfile(getStudentId(newStudent), "personal");
+    beginPersonalEditForStudent(newStudent);
 
     try {
-      if (formMode === "edit") {
-        const updatedStudent = await updateStudent(selectedStudentId, {
-          fullName: formData.name,
-          gradeYear: formData.gradeYear,
-          sectionClass: formData.sectionClass,
-          guardianContact: formData.guardianContact,
-          status: formData.status,
-        });
-
-        const normalized = normalizeStudentRow(updatedStudent);
-        setStudents((currentStudents) =>
-          currentStudents.map((student) =>
-            student.id === selectedStudentId
-              ? {
-                  ...student,
-                  ...normalized,
-                }
-              : student
-          )
-        );
-      } else {
-        const createdStudent = await createStudent({
-          studentCode: nextStudentCode(students),
-          fullName: formData.name,
-          gradeYear: formData.gradeYear,
-          sectionClass: formData.sectionClass,
-          guardianContact: formData.guardianContact,
-          status: formData.status,
-        });
-
-        const normalized = normalizeStudentRow(createdStudent);
-        setStudents((currentStudents) => [normalized, ...currentStudents]);
-        setSelectedStudentId(normalized.id);
+      const payload = {
+        studentCode: newStudent.studentCode,
+        fullName: newStudent.fullName,
+        gradeYear: newStudent.currentEnrollment.gradeLevel,
+        sectionClass: newStudent.currentEnrollment.section,
+        status: newStudent.status,
+        guardianContact: newStudent.guardianContact,
+        enrollmentDate: newStudent.currentEnrollment.enrolledAt || newStudent.createdAt,
+      };
+      const created = await createStudent(payload);
+      const normalized = normalizeBackendStudent(created);
+      setStudents((currentStudents) =>
+        currentStudents.map((student) =>
+          getStudentId(student) === getStudentId(newStudent) ? normalized || student : student
+        )
+      );
+      if (normalized) {
+        setSelectedStudentId(getStudentId(normalized));
       }
-
-      setLoadError("");
-      setView("table");
+      setAddStatus("Student saved.");
     } catch (error) {
-      setLoadError(error?.message || "Failed to save student.");
+      console.error("Create student error:", error);
+      setAddStatus("Failed to save student.");
+      setAddError(error?.message || "Unable to reach the API.");
+    } finally {
+      setIsAddingStudent(false);
     }
   };
 
-  const handleCsvFileChange = (event) => {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImportText(String(reader.result || ""));
-      setImportFileName(selectedFile.name);
-      setImportStep("upload");
-      setValidatedRows([]);
-      setImportError("");
-    };
-    reader.readAsText(selectedFile);
+  const handleImport = () => {
+    setImportStatus("");
+    fileInputRef.current?.click();
   };
 
-  const handleValidateCsv = () => {
-    if (!importText.trim()) {
-      setImportError("Please upload a CSV file before validating.");
-      return;
-    }
+  const handleImportFile = async (event) => {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+    setImportStatus("Importing students...");
 
-    const rows = parseCsvRows(importText);
-    if (!rows.length) {
-      setImportError("No student rows found. Add a header row and at least one data row.");
-      return;
-    }
-
-    setValidatedRows(rows);
-    setImportStep("validate");
-    setImportError("");
-  };
-
-  const handleConfirmImport = async () => {
-    if (!validatedRows.length) {
-      setImportError("No validated rows found.");
-      return;
-    }
-
-    let codeCounter = highestStudentCode(students);
-    const createdRows = [];
-
-    for (let rowIndex = 0; rowIndex < validatedRows.length; rowIndex += 1) {
-      const row = validatedRows[rowIndex];
-      const fallbackCode = `STD-${++codeCounter}`;
-      const studentCode =
-        row.studentCode && !row.studentCode.startsWith("CSV-")
-          ? row.studentCode
-          : fallbackCode;
-
-      try {
-        const createdStudent = await createStudent({
-          studentCode,
-          fullName: row.name,
-          gradeYear: row.gradeYear,
-          sectionClass: row.sectionClass,
-          guardianContact: row.guardianContact,
-          status: "Active",
-        });
-        createdRows.push(normalizeStudentRow(createdStudent));
-      } catch (error) {
-        if (createdRows.length) {
-          setStudents((currentStudents) => [...createdRows, ...currentStudents]);
-        }
-        setImportError(
-          `Import stopped on row ${rowIndex + 1}: ${
-            error?.message || "Failed to import students."
-          }`
-        );
+    try {
+      const text = await file.text();
+      const records = parseCsvRecords(text);
+      if (!records.length) {
+        setImportStatus("CSV contained no student rows.");
         return;
       }
+
+      const importedStudents = [];
+      setStudents((currentStudents) => {
+        let updated = [...currentStudents];
+        records.forEach((record) => {
+          const blank = createBlankStudent(updated);
+          const imported = buildImportedStudent(record, blank.studentCode, blank);
+          updated = [...updated, imported];
+          importedStudents.push(imported);
+        });
+        return updated;
+      });
+
+      if (importedStudents.length) {
+        setImportStatus(`${importedStudents.length} student(s) imported.`);
+        setPage(1);
+        openStudentProfile(importedStudents[0].studentCode, "personal");
+        beginPersonalEditForStudent(importedStudents[0]);
+      } else {
+        setImportStatus("No students were created from the CSV file.");
+      }
+    } catch (error) {
+      console.error("Import error:", error);
+      setImportStatus("Failed to import the CSV file.");
+    } finally {
+      if (event.target) {
+        event.target.value = "";
+      }
     }
-
-    setStudents((currentStudents) => [...createdRows, ...currentStudents]);
-    setImportStep("confirm");
-    setImportError("");
-    setLoadError("");
-
-    window.setTimeout(() => {
-      resetImportFlow();
-      setView("table");
-    }, 900);
   };
 
-  const viewLogs = selectedStudent
-    ? [
-        `${formatDate(selectedStudent.enrollmentDate)}: Student enrolled`,
-        `${formatDate(new Date())}: Record viewed by Admin`,
-      ]
-    : [];
+  const handleExport = () => {
+    exportRowsToCsv("student-masterlist.csv", filteredRows, [
+      { key: "studentId", label: "Student ID" },
+      { key: "fullName", label: "Full Name" },
+      { key: "grade", label: "Grade" },
+      { key: "section", label: "Section" },
+      { key: "status", label: "Status" },
+      { key: "requirementLabel", label: "Requirements" },
+      { key: "updatedAt", label: "Last Updated" },
+    ]);
+  };
 
   return (
     <section className="sa-module">
@@ -518,414 +865,742 @@ export default function StudentsPage() {
         <>
           <PageHeader
             title="Students"
-            subtitle="Manage students with persistent backend data, standard search, filters, sorting, pagination, and bulk actions."
+            subtitle="Manage student records with list-first workflows, requirement visibility, and profile drill-down."
             actions={
               <div className="sa-action-group">
-                <button type="button" className="sa-btn sa-btn-secondary" onClick={() => loadStudents()}>
-                  Refresh
-                </button>
-                <button type="button" className="sa-btn sa-btn-secondary" onClick={handleOpenAdd}>
-                  Add Student
-                </button>
                 <button
                   type="button"
                   className="sa-btn sa-btn-primary"
-                  onClick={() => {
-                    resetImportFlow();
-                    setView("import");
-                  }}
+                  onClick={handleAddStudent}
+                  disabled={isAddingStudent}
                 >
-                  Bulk Import (CSV)
+                  {isAddingStudent ? "Saving..." : "+ Add Student"}
+                </button>
+                <button type="button" className="sa-btn sa-btn-secondary" onClick={handleImport}>
+                  Import
+                </button>
+                <button type="button" className="sa-btn sa-btn-secondary" onClick={handleExport}>
+                  Export
                 </button>
               </div>
             }
           />
 
-          {loadError ? <p className="sa-error-text">{loadError}</p> : null}
-          {isLoading ? <p className="sa-muted-text">Loading students...</p> : null}
-
-          <TableToolbar
-            searchTerm={searchTerm}
-            onSearchChange={(value) => {
-              setSearchTerm(value);
-              setPage(1);
-            }}
-            searchPlaceholder="Search student ID, name, grade, section..."
-            filters={[
-              {
-                key: "status",
-                label: "Status",
-                value: statusFilter,
-                onChange: (value) => {
-                  setStatusFilter(value);
-                  setPage(1);
-                },
-                options: [
-                  { value: "all", label: "All Status" },
-                  { value: "Active", label: "Active" },
-                  { value: "Inactive", label: "Inactive" },
-                  { value: "Archived", label: "Archived" },
-                ],
-              },
-              {
-                key: "section",
-                label: "Class",
-                value: sectionFilter,
-                onChange: (value) => {
-                  setSectionFilter(value);
-                  setPage(1);
-                },
-                options: [
-                  { value: "all", label: "All Classes" },
-                  ...sectionOptions.map((section) => ({ value: section, label: section })),
-                ],
-              },
-              {
-                key: "date",
-                label: "Date",
-                value: dateFilter,
-                onChange: (value) => {
-                  setDateFilter(value);
-                  setPage(1);
-                },
-                options: [
-                  { value: "", label: "All Dates" },
-                  ...[...new Set(students.map((student) => student.enrollmentDate).filter(Boolean))].map(
-                    (date) => ({
-                      value: date,
-                      label: formatDate(date),
-                    })
-                  ),
-                ],
-              },
-            ]}
-            sortOptions={studentSortOptions.map(({ value, label }) => ({ value, label }))}
-            sortValue={sortValue}
-            onSortChange={(value) => {
-              setSortValue(value);
-              setPage(1);
-            }}
-            pageSize={pageSize}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setPage(1);
-            }}
-            selectedCount={selectedIds.size}
-            bulkActions={[
-              { label: "Archive", tone: "sa-btn-danger", onClick: handleBulkArchive },
-              { label: "Publish", tone: "sa-btn-secondary", onClick: handleBulkPublish },
-              { label: "Export", tone: "sa-btn-secondary", onClick: handleBulkExport },
-            ]}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: "none" }}
+            onChange={handleImportFile}
           />
 
-          <AdminTable
-            columns={[
-              "Select",
-              "Student ID",
-              "Name",
-              "Grade/Year",
-              "Section/Class",
-              "Guardian Contact",
-              "Status",
-              "Enrollment Date",
-              "Actions",
-            ]}
-            minWidth={1280}
-          >
-            {pagedStudents.map((student) => (
-              <tr key={student.id}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(student.id)}
-                    onChange={() => setSelectedIds((current) => toggleSelection(current, student.id))}
-                  />
-                </td>
-                <td>{student.studentCode}</td>
-                <td>{student.name}</td>
-                <td>{student.gradeYear}</td>
-                <td>{student.sectionClass}</td>
-                <td>{student.guardianContact}</td>
-                <td>
-                  <StatusBadge status={student.status} />
-                </td>
-                <td>{formatDate(student.enrollmentDate)}</td>
-                <td>
-                  <div className="sa-action-group">
-                    <button
-                      type="button"
-                      className="sa-btn sa-btn-ghost"
-                      onClick={() => handleOpenView(student.id)}
-                    >
-                      View
-                    </button>
-                    <button
-                      type="button"
-                      className="sa-btn sa-btn-ghost"
-                      onClick={() => handleOpenEdit(student)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="sa-btn sa-btn-danger"
-                      onClick={() => handleArchiveStudent(student.id)}
-                    >
-                      {student.status === "Archived" ? "Restore" : "Archive"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </AdminTable>
+          <div className="sa-panel sa-stack-gap">
+            {importStatus && <div className="smallMuted">{importStatus}</div>}
+            {addStatus && <div className="smallMuted">{addStatus}</div>}
+            {addError && <div className="sa-error-text">{addError}</div>}
+            {isFetchingStudents && <div className="smallMuted">Loading students from backend...</div>}
+            {fetchError && <div className="sa-error-text">{fetchError}</div>}
+            <div className="sa-toolbar-main">
+              <label className="sa-toolbar-search">
+                <span className="sa-toolbar-label">Search</span>
+                <input
+                  value={searchTerm}
+                  onChange={(event) => {
+                    setSearchTerm(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search name / Student ID"
+                />
+              </label>
 
-          <div className="sa-table-meta-row">
-            <label className="sa-table-select-all">
+              <label className="sa-toolbar-filter">
+                <span className="sa-toolbar-label">Grade</span>
+                <select
+                  value={gradeFilter}
+                  onChange={(event) => {
+                    setGradeFilter(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">All Grades</option>
+                  {gradeOptions.map((grade) => (
+                    <option key={grade} value={grade}>
+                      {grade}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="sa-toolbar-filter">
+                <span className="sa-toolbar-label">Section</span>
+                <select
+                  value={sectionFilter}
+                  onChange={(event) => {
+                    setSectionFilter(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">All Sections</option>
+                  {sectionOptions.map((section) => (
+                    <option key={section} value={section}>
+                      {section}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="sa-toolbar-filter">
+                <span className="sa-toolbar-label">Status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">All Status</option>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="sa-toolbar-filter">
+                <span className="sa-toolbar-label">Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setPage(1);
+                  }}
+                >
+                  {[5, 10, 20].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="sa-toggle">
               <input
                 type="checkbox"
-                checked={allVisibleSelected}
-                onChange={() =>
-                  setSelectedIds((current) => {
-                    const next = new Set(current);
-                    if (allVisibleSelected) {
-                      pagedStudents.forEach((student) => next.delete(student.id));
-                    } else {
-                      pagedStudents.forEach((student) => next.add(student.id));
-                    }
-                    return next;
-                  })
-                }
+                checked={missingOnly}
+                onChange={() => {
+                  setMissingOnly((current) => !current);
+                  setPage(1);
+                }}
               />
-              <span>Select page</span>
+              <span>Missing Docs only</span>
             </label>
+
+            <AdminTable
+              columns={[
+                "Student ID",
+                "Full Name",
+                "Grade-Section",
+                "Status",
+                "Requirements",
+                "Last Updated",
+                "Actions",
+              ]}
+              minWidth={1160}
+            >
+              {pageRows.map((row) => (
+                <tr key={row.rowId} className="sa-row-clickable" onClick={() => openStudentProfile(row.studentId)}>
+                  <td>{row.studentId}</td>
+                  <td>{row.fullName}</td>
+                  <td>{row.gradeSection}</td>
+                  <td>
+                    <StatusBadge status={row.status} />
+                  </td>
+                  <td>
+                    <div className="sa-requirement-badge">
+                      <StatusBadge status={row.missingRequirements === 0 ? "Complete" : "Missing"} />
+                      <span className="sa-muted-inline">{row.requirementLabel}</span>
+                    </div>
+                  </td>
+                  <td>{formatDate(row.updatedAt)}</td>
+                  <td>
+                    <div className="sa-action-group">
+                      <button
+                        type="button"
+                        className="sa-btn sa-btn-ghost"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openStudentProfile(row.studentId, "overview");
+                        }}
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        className="sa-btn sa-btn-secondary"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openStudentProfile(row.studentId, "personal");
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="sa-btn sa-btn-danger"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          archiveStudent(row.studentId);
+                        }}
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </AdminTable>
 
             <TablePagination
               page={currentPage}
               totalPages={totalPages}
-              totalItems={filteredStudents.length}
+              totalItems={filteredRows.length}
               onPageChange={setPage}
             />
           </div>
         </>
       ) : null}
 
-      {view === "view" && selectedStudent ? (
+      {view === "profile" && selectedStudent ? (
         <>
           <PageHeader
-            title={`Student: ${selectedStudent.name}`}
-            subtitle={`${selectedStudent.studentCode} | ${selectedStudent.gradeYear} | ${selectedStudent.sectionClass}`}
+            title="Student Profile"
+            subtitle="Profile-first view with student details, requirements, notes, and audit history."
             actions={
               <button type="button" className="sa-btn sa-btn-secondary" onClick={() => setView("table")}>
-                Back to Table
+                Back to Students
               </button>
             }
           />
 
-          <div className="sa-panel">
-            <DetailTabs tabs={studentTabs} activeTab={activeTab} onChange={setActiveTab} />
-
-            {activeTab === "profile" ? (
-              <div className="sa-detail-grid">
-                <div>
-                  <p className="sa-label">Guardian Contact</p>
-                  <p className="sa-value">{selectedStudent.guardianContact}</p>
-                </div>
-                <div>
-                  <p className="sa-label">Birth Date</p>
-                  <p className="sa-value">{selectedStudent.profile.birthDate}</p>
-                </div>
-                <div>
-                  <p className="sa-label">Address</p>
-                  <p className="sa-value">{selectedStudent.profile.address}</p>
-                </div>
-                <div>
-                  <p className="sa-label">Adviser</p>
-                  <p className="sa-value">{selectedStudent.profile.adviser}</p>
-                </div>
+          <div className="sa-panel sa-profile-header">
+            <div className="sa-profile-main">
+              <div className="sa-profile-photo" aria-hidden="true">
+                {selectedStudent.photoUrl ? (
+                  <img src={selectedStudent.photoUrl} alt={normalizeName(selectedStudent)} />
+                ) : (
+                  <span>{normalizeName(selectedStudent).slice(0, 2).toUpperCase()}</span>
+                )}
               </div>
-            ) : null}
-
-            {activeTab === "history" ? (
-              <div className="sa-detail-grid">
-                <div>
-                  <p className="sa-label">Total Paid</p>
-                  <p className="sa-value">${selectedStudent.payments.totalPaid.toLocaleString()}</p>
+              <div className="sa-profile-summary">
+                <h2 className="sa-panel-title">{normalizeName(selectedStudent)}</h2>
+                <p className="sa-muted-text">Student ID: {getStudentId(selectedStudent)}</p>
+                <div className="sa-chip-list">
+                  <StatusBadge status={selectedStudent.status || "Active"} />
+                  <span className="sa-chip">
+                    {getGrade(selectedStudent)} - {getSection(selectedStudent)}
+                  </span>
                 </div>
-                <div>
-                  <p className="sa-label">Balance</p>
-                  <p className="sa-value">${selectedStudent.payments.balance.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="sa-label">Attendance Rate</p>
-                  <p className="sa-value">{selectedStudent.attendance.rate}</p>
-                </div>
-                <div>
-                  <p className="sa-label">Grade Average</p>
-                  <p className="sa-value">{selectedStudent.grades.average}</p>
-                </div>
+                <p className="sa-muted-text">
+                  Guardian: {selectedStudent.guardianContact || getPrimaryGuardian(selectedStudent)?.fullName || "-"}
+                </p>
               </div>
-            ) : null}
+            </div>
 
-            {activeTab === "logs" ? (
-              <ul className="sa-list">
-                {viewLogs.map((logEntry) => (
-                  <li key={logEntry}>{logEntry}</li>
-                ))}
-              </ul>
-            ) : null}
+              <div className="sa-action-group">
+                <button type="button" className="sa-btn sa-btn-secondary" onClick={handleStartEdit}>
+                  Edit
+                </button>
+              <button
+                type="button"
+                className="sa-btn sa-btn-secondary"
+                onClick={() => setActiveTab("requirements")}
+              >
+                Upload Document
+              </button>
+              <button type="button" className="sa-btn sa-btn-secondary" onClick={() => window.print()}>
+                Print Profile
+              </button>
+              <button
+                type="button"
+                className="sa-btn sa-btn-danger"
+                onClick={() => archiveStudent(getStudentId(selectedStudent))}
+              >
+                Archive
+              </button>
+            </div>
           </div>
-        </>
-      ) : null}
-
-      {view === "form" ? (
-        <>
-          <PageHeader
-            title={formMode === "add" ? "Add Student" : "Edit Student"}
-            subtitle="Save to return to student records table."
-            actions={
-              <button type="button" className="sa-btn sa-btn-secondary" onClick={() => setView("table")}>
-                Back to Table
-              </button>
-            }
-          />
-
-          {loadError ? <p className="sa-error-text">{loadError}</p> : null}
-
-          <form className="sa-panel sa-form" onSubmit={handleSaveStudent}>
-            <div className="sa-form-grid">
-              <label className="sa-field">
-                <span>Name</span>
-                <input
-                  required
-                  value={formData.name}
-                  onChange={(event) =>
-                    setFormData((currentData) => ({ ...currentData, name: event.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="sa-field">
-                <span>Grade/Year</span>
-                <input
-                  required
-                  value={formData.gradeYear}
-                  onChange={(event) =>
-                    setFormData((currentData) => ({ ...currentData, gradeYear: event.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="sa-field">
-                <span>Section/Class</span>
-                <input
-                  required
-                  value={formData.sectionClass}
-                  onChange={(event) =>
-                    setFormData((currentData) => ({ ...currentData, sectionClass: event.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="sa-field">
-                <span>Guardian Contact</span>
-                <input
-                  required
-                  value={formData.guardianContact}
-                  onChange={(event) =>
-                    setFormData((currentData) => ({ ...currentData, guardianContact: event.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="sa-field">
-                <span>Status</span>
-                <select
-                  value={formData.status}
-                  onChange={(event) =>
-                    setFormData((currentData) => ({ ...currentData, status: event.target.value }))
-                  }
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Archived">Archived</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="sa-form-actions">
-              <button type="button" className="sa-btn sa-btn-secondary" onClick={() => setView("table")}>
-                Cancel
-              </button>
-              <button type="submit" className="sa-btn sa-btn-primary">
-                Save Student
-              </button>
-            </div>
-          </form>
-        </>
-      ) : null}
-
-      {view === "import" ? (
-        <>
-          <PageHeader
-            title="Bulk Import Students"
-            subtitle="Upload CSV, validate rows, then confirm to add students."
-            actions={
-              <button type="button" className="sa-btn sa-btn-secondary" onClick={() => setView("table")}>
-                Back to Table
-              </button>
-            }
-          />
 
           <div className="sa-panel sa-stack-gap">
-            <div className="sa-form-grid">
-              <label className="sa-field">
-                <span>CSV File</span>
-                <input type="file" accept=".csv" onChange={handleCsvFileChange} />
-              </label>
-              <div className="sa-inline-note">
-                Required headers: <code>Student ID, Name, Grade/Year, Section/Class, Guardian Contact</code>
+            <DetailTabs tabs={studentTabs} activeTab={activeTab} onChange={setActiveTab} />
+
+            {activeTab === "overview" ? (
+              <div className="sa-detail-grid">
+                <div>
+                  <p className="sa-label">Current Enrollment</p>
+                  <p className="sa-value">
+                    {selectedStudent.currentEnrollment?.academicYear || "-"} / {getGrade(selectedStudent)} - {getSection(selectedStudent)}
+                  </p>
+                </div>
+                <div>
+                  <p className="sa-label">Enrollment Status</p>
+                  <p className="sa-value">{selectedStudent.currentEnrollment?.enrollmentStatus || "-"}</p>
+                </div>
+                <div>
+                  <p className="sa-label">Requirements Snapshot</p>
+                  <p className="sa-value">
+                    {getMissingCount(selectedStudent) === 0
+                      ? "All required documents complete"
+                      : `${getMissingCount(selectedStudent)} requirement(s) missing`}
+                  </p>
+                </div>
+                <div>
+                  <p className="sa-label">Last Updated</p>
+                  <p className="sa-value">{formatDateTime(selectedStudent.updatedAt || selectedStudent.createdAt)}</p>
+                </div>
               </div>
-            </div>
+            ) : null}
 
-            {importFileName ? <p className="sa-muted-text">Loaded file: {importFileName}</p> : null}
-            {importError ? <p className="sa-error-text">{importError}</p> : null}
-
-            <div className="sa-action-group">
-              <button type="button" className="sa-btn sa-btn-primary" onClick={handleValidateCsv}>
-                Validate
-              </button>
-              <button type="button" className="sa-btn sa-btn-secondary" onClick={resetImportFlow}>
-                Reset
-              </button>
-            </div>
-
-            {importStep !== "upload" ? (
+            {activeTab === "personal" ? (
               <>
-                <h3 className="sa-panel-title">Validated Rows ({validatedRows.length})</h3>
+                {isEditingPersonal ? (
+                  <div className="sa-form-grid">
+                    <div className="sa-field">
+                      <span>First Name</span>
+                      <input
+                        value={selectedStudent.firstName || ""}
+                        onChange={(event) => handlePersonalFieldChange("firstName", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Middle Name</span>
+                      <input
+                        value={selectedStudent.middleName || ""}
+                        onChange={(event) => handlePersonalFieldChange("middleName", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Last Name</span>
+                      <input
+                        value={selectedStudent.lastName || ""}
+                        onChange={(event) => handlePersonalFieldChange("lastName", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Birthdate</span>
+                      <input
+                        type="date"
+                        value={selectedStudent.birthdate || ""}
+                        onChange={(event) => handlePersonalFieldChange("birthdate", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Address</span>
+                      <input
+                        value={selectedStudent.address || ""}
+                        onChange={(event) => handlePersonalFieldChange("address", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Phone</span>
+                      <input
+                        type="tel"
+                        value={selectedStudent.phone || ""}
+                        onChange={(event) => handlePersonalFieldChange("phone", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Email</span>
+                      <input
+                        type="email"
+                        value={selectedStudent.email || ""}
+                        onChange={(event) => handlePersonalFieldChange("email", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Sex</span>
+                      <select
+                        value={selectedStudent.sex || ""}
+                        onChange={(event) => handlePersonalFieldChange("sex", event.target.value)}
+                      >
+                        {["Male", "Female", "Other"].map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="sa-field">
+                      <span>Status</span>
+                      <select
+                        value={selectedStudent.status || editableStatusOptions[0]}
+                        onChange={(event) => handlePersonalFieldChange("status", event.target.value)}
+                      >
+                        {editableStatusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="sa-field">
+                      <span>Grade Level</span>
+                      <input
+                        value={selectedStudent.currentEnrollment?.gradeLevel || ""}
+                        onChange={(event) => handleEnrollmentChange("gradeLevel", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Section</span>
+                      <input
+                        value={selectedStudent.currentEnrollment?.section || ""}
+                        onChange={(event) => handleEnrollmentChange("section", event.target.value)}
+                      />
+                    </div>
+                    <div className="sa-field">
+                      <span>Enrollment Status</span>
+                      <select
+                        value={
+                          selectedStudent.currentEnrollment?.enrollmentStatus ||
+                          enrollmentStatusOptions[0]
+                        }
+                        onChange={(event) => handleEnrollmentChange("enrollmentStatus", event.target.value)}
+                      >
+                        {enrollmentStatusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="sa-detail-grid">
+                    <div>
+                      <p className="sa-label">Full Name</p>
+                      <p className="sa-value">{normalizeName(selectedStudent)}</p>
+                    </div>
+                    <div>
+                      <p className="sa-label">Birthdate</p>
+                      <p className="sa-value">{formatDate(selectedStudent.birthdate)}</p>
+                    </div>
+                    <div>
+                      <p className="sa-label">Address</p>
+                      <p className="sa-value">{selectedStudent.address || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="sa-label">Contact</p>
+                      <p className="sa-value">{selectedStudent.phone || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="sa-label">Email</p>
+                      <p className="sa-value">{selectedStudent.email || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="sa-label">Sex</p>
+                      <p className="sa-value">{selectedStudent.sex || "-"}</p>
+                    </div>
+                  </div>
+                )}
+                <div className="sa-form-actions">
+                  {isEditingPersonal ? (
+                    <>
+                      <button type="button" className="sa-btn sa-btn-primary" onClick={handleSavePersonal}>
+                        Save Changes
+                      </button>
+                      <button type="button" className="sa-btn sa-btn-ghost" onClick={handleCancelPersonalEdit}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <p className="sa-inline-note">Tap Edit to modify student info.</p>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            {activeTab === "guardian" ? (
+              <div className="sa-stack-gap">
                 <AdminTable
-                  columns={["Student ID", "Name", "Grade/Year", "Section/Class", "Guardian Contact"]}
-                  minWidth={880}
+                  columns={[
+                    "Guardian Name",
+                    "Relationship",
+                    "Phone",
+                    "Email",
+                    "Actions",
+                  ]}
+                  minWidth={1040}
+                  emptyMessage="No guardian records."
                 >
-                  {validatedRows.map((row, rowIndex) => (
-                    <tr key={`${row.studentCode}-${rowIndex}`}>
-                      <td>{row.studentCode}</td>
-                      <td>{row.name}</td>
-                      <td>{row.gradeYear}</td>
-                      <td>{row.sectionClass}</td>
-                      <td>{row.guardianContact}</td>
+                  {(selectedStudent.guardians || []).map((guardian, index) => (
+                    <tr key={`${guardian.fullName}-${guardian.relationship}`}>
+                      <td>{guardian.fullName || "-"}</td>
+                      <td>{guardian.relationship || "-"}</td>
+                      <td>{guardian.phone || "-"}</td>
+                      <td>{guardian.email || "-"}</td>
+                      <td>
+                        <div className="sa-action-group">
+                          <button
+                            type="button"
+                            className="sa-btn sa-btn-secondary"
+                            onClick={() => handleEditGuardian(index)}
+                          >
+                            Edit
+                          </button>
+                          {!guardian.isPrimary && (
+                            <button
+                              type="button"
+                              className="sa-btn sa-btn-ghost"
+                              onClick={() => handleSetPrimaryGuardian(index)}
+                            >
+                              Set Primary
+                            </button>
+                          )}
+                          {guardian.isPrimary && (
+                            <span className="sa-status sa-status--success">Primary</span>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </AdminTable>
 
-                <div className="sa-action-group">
-                  <button type="button" className="sa-btn sa-btn-primary" onClick={handleConfirmImport}>
-                    Confirm Import
-                  </button>
-                  {importStep === "confirm" ? (
-                    <p className="sa-success-text">Students imported successfully.</p>
-                  ) : null}
+              <div className="sa-detail-grid">
+                <div>
+                  <p className="sa-label">Emergency Contact</p>
+                  <p className="sa-value">{selectedStudent.emergencyContact?.fullName || "-"}</p>
                 </div>
+                <div>
+                  <p className="sa-label">Relationship</p>
+                  <p className="sa-value">{selectedStudent.emergencyContact?.relationship || "-"}</p>
+                </div>
+                <div>
+                  <p className="sa-label">Phone</p>
+                  <p className="sa-value">{selectedStudent.emergencyContact?.phone || "-"}</p>
+                </div>
+                <div>
+                  <p className="sa-label">Email</p>
+                  <p className="sa-value">{selectedStudent.emergencyContact?.email || "-"}</p>
+                </div>
+              </div>
+
+              {isEditingGuardian ? (
+                <>
+                  <div className="sa-panel sa-form sa-emergency-form">
+                    <h4 className="sa-panel-title">Emergency Contact</h4>
+                    <div className="sa-form-grid">
+                      <label className="sa-field">
+                        <span>Full Name</span>
+                        <input
+                          value={selectedStudent.emergencyContact?.fullName || ""}
+                          onChange={(event) => handleEmergencyFieldChange("fullName", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field">
+                        <span>Relationship</span>
+                        <input
+                          value={selectedStudent.emergencyContact?.relationship || ""}
+                          onChange={(event) => handleEmergencyFieldChange("relationship", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field">
+                        <span>Phone</span>
+                        <input
+                          type="tel"
+                          value={selectedStudent.emergencyContact?.phone || ""}
+                          onChange={(event) => handleEmergencyFieldChange("phone", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field">
+                        <span>Email</span>
+                        <input
+                          type="email"
+                          value={selectedStudent.emergencyContact?.email || ""}
+                          onChange={(event) => handleEmergencyFieldChange("email", event.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <p className="sa-inline-note">Changes are saved automatically.</p>
+                  </div>
+
+                  <div className="sa-guardian-form">
+                    <h4 className="sa-panel-title">Guardian Records</h4>
+                    <div className="sa-form-grid">
+                      <label className="sa-field">
+                        <span>Guardian Name</span>
+                        <input
+                          value={guardianForm.fullName}
+                          onChange={(event) => handleGuardianFormChange("fullName", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field">
+                        <span>Relationship</span>
+                        <input
+                          value={guardianForm.relationship}
+                          onChange={(event) => handleGuardianFormChange("relationship", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field">
+                        <span>Phone</span>
+                        <input
+                          type="tel"
+                          value={guardianForm.phone}
+                          onChange={(event) => handleGuardianFormChange("phone", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field">
+                        <span>Email</span>
+                        <input
+                          type="email"
+                          value={guardianForm.email}
+                          onChange={(event) => handleGuardianFormChange("email", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field">
+                        <span>Address</span>
+                        <input
+                          value={guardianForm.address}
+                          onChange={(event) => handleGuardianFormChange("address", event.target.value)}
+                        />
+                      </label>
+                      <label className="sa-field sa-field-inline">
+                        <input
+                          type="checkbox"
+                          checked={guardianForm.isPrimary}
+                          onChange={(event) => handleGuardianFormChange("isPrimary", event.target.checked)}
+                        />
+                        <span>Primary contact</span>
+                      </label>
+                    </div>
+                    <div className="sa-form-actions sa-guardian-form-actions">
+                      <button
+                        type="button"
+                        className="sa-btn sa-btn-primary"
+                        onClick={handleGuardianSave}
+                      >
+                        {editingGuardianIndex !== null ? "Save Guardian" : "Add Guardian"}
+                      </button>
+                      {editingGuardianIndex !== null && (
+                        <button
+                          type="button"
+                          className="sa-btn sa-btn-ghost"
+                          onClick={resetGuardianForm}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                    {guardianMessage && (
+                      <p className={guardianMessage.startsWith("Please") ? "sa-error-text" : "sa-success-text"}>
+                        {guardianMessage}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="sa-inline-note">
+                  Click Edit to modify guardian/emergency contact information.
+                </p>
+              )}
+            </div>
+          ) : null}
+
+            {activeTab === "enrollment" ? (
+              <AdminTable
+                columns={["School Year", "Grade-Section", "Status", "Enrolled At", "Notes"]}
+                minWidth={980}
+                emptyMessage="No enrollment history."
+              >
+                {(selectedStudent.enrollmentHistory || []).map((history) => (
+                  <tr key={`${history.academicYear}-${history.gradeLevel}-${history.section}`}>
+                    <td>{history.academicYear || "-"}</td>
+                    <td>
+                      {history.gradeLevel || "-"} - {history.section || "-"}
+                    </td>
+                    <td>{history.enrollmentStatus || "-"}</td>
+                    <td>{formatDate(history.enrolledAt)}</td>
+                    <td>{history.remarks || "-"}</td>
+                  </tr>
+                ))}
+              </AdminTable>
+            ) : null}
+
+            {activeTab === "requirements" ? (
+              <>
+                <AdminTable
+                  columns={["Requirement", "Verification Status", "Uploads", "Verified At", "Notes"]}
+                  minWidth={1080}
+                >
+                  {requiredTypes.map((type) => {
+                    const requirement = getRequirement(selectedStudent, type.id);
+                    return (
+                      <tr key={type.id}>
+                        <td>{type.name}</td>
+                        <td>
+                          <StatusBadge status={requirement.status === "Verified" ? "Complete" : "Missing"} />
+                        </td>
+                        <td>
+                          <div className="sa-upload-cell">
+                            {(requirement.documents || []).length ? (
+                              <div className="sa-upload-list">
+                                {(requirement.documents || []).map((document) => (
+                                  <span key={document.fileName} className="sa-upload-item">
+                                    {document.fileName}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="sa-muted-inline">No uploads</span>
+                            )}
+                            <div className="sa-upload-cta">
+                              <button
+                                type="button"
+                                className="sa-btn sa-btn-secondary sa-btn-sm"
+                                onClick={() => handleRequirementUploadClick(type.id)}
+                              >
+                                Upload
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{formatDate(requirement.verifiedAt)}</td>
+                        <td>{requirement.notes || "-"}</td>
+                      </tr>
+                    );
+                  })}
+                </AdminTable>
+                <input
+                  ref={requirementFileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  style={{ display: "none" }}
+                  onChange={handleRequirementFileChange}
+                />
+                {requirementUploadMessage && (
+                  <p className="sa-success-text">{requirementUploadMessage}</p>
+                )}
               </>
+            ) : null}
+
+            {activeTab === "notes" ? (
+              <ul className="sa-list">
+                {(selectedStudent.notes || []).map((note) => (
+                  <li key={note.id}>
+                    <strong>{formatDateTime(note.createdAt)}</strong> - {note.note} ({note.createdBy || "Admin"})
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {activeTab === "activity" ? (
+              <ul className="sa-list">
+                {(selectedStudent.activityLog || []).map((entry) => (
+                  <li key={entry.id}>
+                    <strong>{entry.action.toUpperCase()}</strong> - {entry.details} ({formatDateTime(entry.createdAt)})
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </div>
         </>

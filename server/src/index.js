@@ -7,7 +7,6 @@ import invoiceRoutes from "./routes/invoices.js";
 import noticeRoutes from "./routes/notices.js";
 import roleRoutes from "./routes/roles.js";
 import studentRoutes from "./routes/students.js";
-import teacherRoutes from "./routes/teachers.js";
 import userRoutes from "./routes/users.js";
 
 dotenv.config();
@@ -94,7 +93,6 @@ app.get("/api/status", async (req, res) => {
   const collectionCounts = connected
     ? {
         users: await safeCount("users"),
-        teachers: await safeCount("teachers"),
         students: await safeCount("students"),
         notices: await safeCount("notices"),
         invoices: await safeCount("invoices"),
@@ -118,7 +116,6 @@ app.use("/api/invoices", invoiceRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/students", studentRoutes);
-app.use("/api/teachers", teacherRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api", (req, res) => {
   res

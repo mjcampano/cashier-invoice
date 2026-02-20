@@ -78,21 +78,6 @@ const request = async (path, options = {}) => {
   return data;
 };
 
-export const listTeachers = (params = {}) =>
-  request(`/teachers${toQueryString(params)}`);
-
-export const createTeacher = (payload) =>
-  request("/teachers", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-
-export const updateTeacher = (id, payload) =>
-  request(`/teachers/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-
 export const listStudents = (params = {}) =>
   request(`/students${toQueryString(params)}`);
 
@@ -107,3 +92,5 @@ export const updateStudent = (id, payload) =>
     method: "PUT",
     body: JSON.stringify(payload),
   });
+
+export const getStatus = () => request("/status");

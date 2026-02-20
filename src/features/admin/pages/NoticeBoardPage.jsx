@@ -531,7 +531,6 @@ export default function NoticeBoardPage() {
                   }
                 >
                   <option value="All">All</option>
-                  <option value="Teachers">Teachers</option>
                   <option value="Students">Students</option>
                   <option value="Class">Class</option>
                 </select>

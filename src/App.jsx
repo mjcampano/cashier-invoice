@@ -7,6 +7,7 @@ import Preview from "./pages/Preview";
 import ProofOfPayment from "./components/ProofOfPayment";
 import AdminLayout from "./layouts/AdminLayout";
 import AdminWorkspace from "./features/admin/AdminWorkspace";
+import useNotifications from "./components/notifications/useNotifications";
 
 import { PROGRAMS, buildSchoolItems } from "./data/tuitionTemplates";
 import { uid } from "./utils";
@@ -89,6 +90,13 @@ const normalizeInvoiceData = (incoming) => {
 
 export default function App() {
   const invoiceRef = useRef(null);
+  const {
+    showAlert,
+    showToast,
+    showValidation,
+    clearValidation,
+    confirm,
+  } = useNotifications();
 
   const [mode, setMode] = useState("admin"); // "admin" or "invoice"
   const [activeMenu, setActiveMenu] = useState("dashboard");
@@ -161,11 +169,11 @@ export default function App() {
       pdf.save(`Billing-Statement-${safeMonth}.pdf`);
     } catch (err) {
       console.error("Export PDF error:", err);
-      alert("PDF export failed. Please try again.");
+      showAlert("PDF export failed. Please try again.", { variant: "danger" });
     } finally {
       setIsExporting(false);
     }
-  }, [data.invoice.billingMonth, isExporting]);
+  }, [data.invoice.billingMonth, isExporting, showAlert]);
 
   const applySchoolTemplateToItems = useCallback(() => {
     const templateItems = buildSchoolItems(data.school.programKey, data.school.trackKey).map(
@@ -188,14 +196,16 @@ export default function App() {
     } catch (err) {
       console.error("List invoices error:", err);
       setInvoiceListStatus(err.message || "Failed to load saved students.");
+      showAlert(err.message || "Failed to load saved students.", { variant: "danger" });
     } finally {
       setIsListingInvoices(false);
     }
-  }, []);
+  }, [showAlert]);
 
   const handleSaveInvoice = useCallback(async () => {
     if (isSaving) return;
 
+    clearValidation();
     setIsSaving(true);
     setSaveStatus("Saving invoice...");
 
@@ -206,18 +216,29 @@ export default function App() {
 
       setInvoiceId(response.id);
       setSaveStatus(`Saved at ${new Date().toLocaleTimeString()}`);
+      showToast("Invoice saved successfully.");
       await handleRefreshInvoices();
     } catch (err) {
       console.error("Save invoice error:", err);
       setSaveStatus(err.message || "Save failed.");
+      showValidation(err.message || "Save failed.");
     } finally {
       setIsSaving(false);
     }
-  }, [data, handleRefreshInvoices, invoiceId, isSaving]);
+  }, [
+    data,
+    handleRefreshInvoices,
+    invoiceId,
+    isSaving,
+    showToast,
+    showValidation,
+    clearValidation,
+  ]);
 
   const handleLoadLatest = useCallback(async () => {
     if (isLoading) return;
 
+    clearValidation();
     setIsLoading(true);
     setSaveStatus("Loading latest invoice...");
 
@@ -226,22 +247,26 @@ export default function App() {
       setData(normalizeInvoiceData(response.data));
       setInvoiceId(response.id);
       setSaveStatus(`Loaded invoice ${response.id}`);
+      showToast("Latest invoice loaded.");
     } catch (err) {
       console.error("Load latest invoice error:", err);
       if (err.status === 404) {
         setSaveStatus("No saved invoices found.");
+        showAlert("No saved invoices found.", { variant: "warning" });
       } else {
         setSaveStatus(err.message || "Load failed.");
+        showAlert(err.message || "Load failed.", { variant: "danger" });
       }
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading]);
+  }, [isLoading, showToast, showAlert, clearValidation]);
 
   const handleLoadInvoice = useCallback(
     async (id) => {
       if (!id || isLoading) return;
 
+      clearValidation();
       setIsLoading(true);
       setActiveInvoiceActionId(id);
       setSaveStatus("Loading selected invoice...");
@@ -254,21 +279,28 @@ export default function App() {
       } catch (err) {
         console.error("Load invoice by id error:", err);
         setSaveStatus(err.message || "Load failed.");
+        showAlert(err.message || "Load failed.", { variant: "danger" });
       } finally {
         setActiveInvoiceActionId(null);
         setIsLoading(false);
       }
     },
-    [isLoading]
+    [isLoading, showAlert, clearValidation]
   );
 
   const handleDeleteInvoice = useCallback(
     async (id) => {
       if (!id) return;
 
-      const confirmed = window.confirm(
-        "Delete this saved student invoice? This cannot be undone."
+      const confirmed = await confirm(
+        "Delete this saved student invoice? This cannot be undone.",
+        {
+          title: "Delete invoice",
+          confirmLabel: "Delete",
+          cancelLabel: "Cancel",
+        }
       );
+
       if (!confirmed) return;
 
       setActiveInvoiceActionId(id);
@@ -281,22 +313,25 @@ export default function App() {
           setData(createDefaultData());
         }
         setSaveStatus("Invoice deleted.");
+        showAlert("Invoice deleted.", { variant: "success" });
         await handleRefreshInvoices();
       } catch (err) {
         console.error("Delete invoice error:", err);
         setSaveStatus(err.message || "Delete failed.");
+        showAlert(err.message || "Delete failed.", { variant: "danger" });
       } finally {
         setActiveInvoiceActionId(null);
       }
     },
-    [handleRefreshInvoices, invoiceId]
+    [confirm, handleRefreshInvoices, invoiceId, showAlert]
   );
 
   const handleNewInvoice = useCallback(() => {
     setData(createDefaultData());
     setInvoiceId(null);
     setSaveStatus("New invoice form ready.");
-  }, []);
+    clearValidation();
+  }, [clearValidation]);
 
   const handleBackToAdmin = useCallback(() => {
     setMode("admin");
@@ -331,14 +366,17 @@ export default function App() {
       await deleteInvoice(created.id);
 
       setSaveStatus(`Delete API test passed at ${new Date().toLocaleTimeString()}`);
+      showToast("Delete API test passed.");
       await handleRefreshInvoices();
     } catch (err) {
       console.error("Delete API test error:", err);
-      setSaveStatus(`Delete API test failed: ${err.message || "Unknown error"}`);
+      const message = err.message || "Unknown error";
+      setSaveStatus(`Delete API test failed: ${message}`);
+      showAlert(`Delete API test failed: ${message}`, { variant: "danger" });
     } finally {
       setIsDeleteTestRunning(false);
     }
-  }, [handleRefreshInvoices, isDeleteTestRunning]);
+  }, [handleRefreshInvoices, isDeleteTestRunning, showToast, showAlert]);
 
   const handleCheckApi = useCallback(async () => {
     setApiStatus("checking");
@@ -352,10 +390,11 @@ export default function App() {
       console.error("API health check error:", err);
       setApiStatus("error");
       setApiMessage(err.message || "Connection failed");
+      showAlert(err.message || "Connection failed", { variant: "danger" });
     } finally {
       setApiCheckedAt(new Date());
     }
-  }, []);
+  }, [showAlert]);
 
   useEffect(() => {
     handleCheckApi();
@@ -452,7 +491,7 @@ export default function App() {
           </main>
         </div>
       ) : (
-        <AdminWorkspace activeMenu={activeMenu} />
+        <AdminWorkspace activeMenu={activeMenu} onNavigate={setActiveMenu} />
       )}
     </AdminLayout>
   );
