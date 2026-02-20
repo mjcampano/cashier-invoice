@@ -33,15 +33,6 @@ const ClassSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    adviserTeacherId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Teacher",
-      default: null,
-    },
-    teacherIds: {
-      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Teacher" }],
-      default: [],
-    },
     status: {
       type: String,
       enum: ["Active", "Inactive"],
@@ -63,19 +54,6 @@ ClassSchema.virtual("enrollments", {
   ref: "Enrollment",
   localField: "_id",
   foreignField: "classId",
-});
-
-ClassSchema.virtual("assignedTeachers", {
-  ref: "Teacher",
-  localField: "teacherIds",
-  foreignField: "_id",
-});
-
-ClassSchema.virtual("adviserTeacher", {
-  ref: "Teacher",
-  localField: "adviserTeacherId",
-  foreignField: "_id",
-  justOne: true,
 });
 
 ClassSchema.statics.findWithStudents = function findWithStudents(match = {}) {

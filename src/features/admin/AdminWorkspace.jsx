@@ -1,29 +1,29 @@
 ﻿import React from "react";
-import AttendancePage from "./pages/AttendancePage";
 import CalendarPage from "./pages/CalendarPage";
 import DashboardPage from "./pages/DashboardPage";
 import InboxPage from "./pages/InboxPage";
 import NoticeBoardPage from "./pages/NoticeBoardPage";
+import ReportsPage from "./pages/ReportsPage";
+import RequirementsPage from "./pages/RequirementsPage";
 import StudentsPage from "./pages/StudentsPage";
-import TeachersPage from "./pages/TeachersPage";
 import "./adminModules.css";
 
 const moduleMap = {
   dashboard: DashboardPage,
-  teachers: TeachersPage,
   students: StudentsPage,
-  attendance: AttendancePage,
+  requirements: RequirementsPage,
+  reports: ReportsPage,
   notice: NoticeBoardPage,
   inbox: InboxPage,
   calendar: CalendarPage,
 };
 
-export default function AdminWorkspace({ activeMenu }) {
+export default function AdminWorkspace({ activeMenu, onNavigate }) {
   const CurrentModule = moduleMap[activeMenu] || DashboardPage;
 
   return (
     <div className="sa-workspace">
-      <CurrentModule />
+      <CurrentModule onNavigate={onNavigate} />
     </div>
   );
 }

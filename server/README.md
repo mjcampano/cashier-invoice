@@ -49,14 +49,13 @@ From `server/` run:
 npm run dev
 ```
 
-## 5. Automatic notice alerts (Users/Teachers)
+## 5. Automatic notice alerts (Users)
 When a new record is created, the backend now auto-creates a notice with:
 - `audience: "All"`
 - `status: "Published"`
 
 Triggers:
 - Create user via `POST /api/users`
-- Create teacher via `POST /api/teachers`
 - Fetch role IDs via `GET /api/roles` (needed before creating user)
 
 Check alerts:
@@ -87,7 +86,7 @@ GET /api/status
 - DB state (`connected`/etc.)
 - DB name
 - uptime
-- document counts (`users`, `teachers`, `notices`, `invoices`)
+- document counts (`users`, `students`, `notices`, `invoices`)
 
 ## Atlas checklist if connection fails
 - Atlas `Network Access` includes your server IP (or `0.0.0.0/0` for testing only).

@@ -12,9 +12,9 @@ export default function Sidebar({
     { id: "dashboard", label: "Dashboard", icon: "DB" },
     { id: "inbox", label: "Inbox", icon: "IN" },
     { id: "calendar", label: "Calendar", icon: "CL" },
-    { id: "teachers", label: "Teachers", icon: "TC" },
     { id: "students", label: "Students", icon: "ST" },
-    { id: "attendance", label: "Attendance", icon: "AT" },
+    { id: "requirements", label: "Requirements", icon: "RQ" },
+    { id: "reports", label: "Reports", icon: "RP" },
     { id: "finance", label: "Finance", icon: "FN" },
     { id: "notice", label: "Notice Board", icon: "NT" },
   ];

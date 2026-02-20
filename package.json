@@ -8,9 +8,11 @@
     "build": "vite build",
     "lint": "eslint .",
     "lint:ci": "eslint . --format=compact",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "audit:prod": "npm audit --omit=dev"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.6.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.0.0",
     "mongodb": "^7.1.0",

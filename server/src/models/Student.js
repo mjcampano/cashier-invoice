@@ -30,7 +30,7 @@ const StudentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Active", "Inactive", "Archived"],
+      enum: ["Active", "Inactive", "Archived", "Graduated", "Pending", "Transferred"],
       default: "Active",
     },
     enrollmentDate: {
@@ -68,12 +68,6 @@ StudentSchema.virtual("payments", {
 
 StudentSchema.virtual("invoiceRecords", {
   ref: "Invoice",
-  localField: "_id",
-  foreignField: "studentId",
-});
-
-StudentSchema.virtual("attendanceRecords", {
-  ref: "AttendanceRecord",
   localField: "_id",
   foreignField: "studentId",
 });

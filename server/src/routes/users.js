@@ -74,10 +74,6 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Invalid roleId." });
     }
 
-    if (payload.teacherId && !isValidObjectId(payload.teacherId)) {
-      return res.status(400).json({ message: "Invalid teacherId." });
-    }
-
     if (payload.studentId && !isValidObjectId(payload.studentId)) {
       return res.status(400).json({ message: "Invalid studentId." });
     }
@@ -87,7 +83,6 @@ router.post("/", async (req, res) => {
       passwordHash,
       roleId: payload.roleId,
       profile: payload.profile || {},
-      teacherId: payload.teacherId || null,
       studentId: payload.studentId || null,
       status: payload.status || "Active",
       lastLoginAt: payload.lastLoginAt || null,
