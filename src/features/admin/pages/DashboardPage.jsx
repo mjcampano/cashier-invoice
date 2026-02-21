@@ -120,6 +120,7 @@ export default function DashboardPage({ onNavigate }) {
   const [systemStatus, setSystemStatus] = useState(null);
   const [systemLoading, setSystemLoading] = useState(true);
   const [systemError, setSystemError] = useState("");
+  const [statusRefreshTick, setStatusRefreshTick] = useState(0);
 
   useEffect(() => {
     let isCancelled = false;
@@ -137,8 +138,9 @@ export default function DashboardPage({ onNavigate }) {
         setSystemError(error.message || "Unable to reach API.");
         setSystemStatus(null);
       } finally {
-        if (isCancelled) return;
-        setSystemLoading(false);
+        if (!isCancelled) {
+          setSystemLoading(false);
+        }
       }
     };
 
@@ -147,10 +149,16 @@ export default function DashboardPage({ onNavigate }) {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [statusRefreshTick]);
+
+  const handleRefreshStatus = () => {
+    if (systemLoading) return;
+    setStatusRefreshTick((current) => current + 1);
+  };
 
   const dbState = systemStatus?.db?.state || "unknown";
   const dbName = systemStatus?.db?.name || "unknown";
+  const dbTone = systemLoading ? "info" : systemError ? "danger" : dbStateTone(dbState);
   const statusTone = systemLoading
     ? "info"
     : systemError
@@ -209,7 +217,17 @@ export default function DashboardPage({ onNavigate }) {
       <div className="sa-panel sa-stack-gap">
         <div className="sa-panel-row">
           <h3 className="sa-panel-title">System Health</h3>
-          <span className={`sa-status sa-status--${statusTone}`}>{statusLabel}</span>
+          <div className="sa-page-actions">
+            <button
+              type="button"
+              className="sa-btn sa-btn-secondary"
+              onClick={handleRefreshStatus}
+              disabled={systemLoading}
+            >
+              {systemLoading ? "Checking..." : "Refresh"}
+            </button>
+            <span className={`sa-status sa-status--${statusTone}`}>{statusLabel}</span>
+          </div>
         </div>
         <div className="sa-detail-grid">
           <div>
@@ -218,7 +236,9 @@ export default function DashboardPage({ onNavigate }) {
           </div>
           <div>
             <p className="sa-label">DB State</p>
-            <p className="sa-value">{dbState}</p>
+            <p className="sa-value">
+              <span className={`sa-status sa-status--${dbTone}`}>{dbState}</span>
+            </p>
           </div>
           <div>
             <p className="sa-label">Last checked</p>

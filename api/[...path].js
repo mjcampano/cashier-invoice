@@ -1,3 +1,6 @@
+import { Buffer } from "node:buffer";
+import process from "node:process";
+
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
