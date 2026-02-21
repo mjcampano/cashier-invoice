@@ -14,28 +14,51 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
-const normalizeBackendBase = (value) => {
-  const trimmed = String(value || "").trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-  return trimmed.endsWith("/api") ? trimmed.slice(0, -4) : trimmed;
+const parseBackendUrl = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return null;
+
+  try {
+    return new URL(trimmed);
+  } catch {
+    return null;
+  }
 };
 
-const buildTargetUrl = (req, backendBase) => {
+const normalizePathPrefix = (value) => {
+  const compact = String(value || "").trim();
+  if (!compact || compact === "/") return "";
+  return `/${compact.replace(/^\/+|\/+$/g, "")}`;
+};
+
+const getPrefixCandidates = (backendUrl) => {
+  const rawPath = normalizePathPrefix(backendUrl.pathname);
+  const withoutApiSuffix = rawPath.endsWith("/api") ? rawPath.slice(0, -4) : rawPath;
+  const candidates = [rawPath, withoutApiSuffix, "/api", ""].map(normalizePathPrefix);
+  return [...new Set(candidates)];
+};
+
+const buildTargetUrls = (req, backendUrl) => {
   const rawPath = Array.isArray(req.query?.path)
     ? req.query.path.join("/")
     : String(req.query?.path || "");
-  const target = new URL(`${backendBase}/api/${rawPath}`);
+  const safePath = rawPath.replace(/^\/+/, "");
+  const suffix = safePath ? `/${safePath}` : "";
 
-  for (const [key, value] of Object.entries(req.query || {})) {
-    if (key === "path") continue;
-    if (Array.isArray(value)) {
-      value.forEach((entry) => target.searchParams.append(key, String(entry)));
-      continue;
+  return getPrefixCandidates(backendUrl).map((prefix) => {
+    const target = new URL(`${backendUrl.origin}${prefix}${suffix}`);
+
+    for (const [key, value] of Object.entries(req.query || {})) {
+      if (key === "path") continue;
+      if (Array.isArray(value)) {
+        value.forEach((entry) => target.searchParams.append(key, String(entry)));
+        continue;
+      }
+      target.searchParams.set(key, String(value));
     }
-    target.searchParams.set(key, String(value));
-  }
 
-  return target;
+    return target;
+  });
 };
 
 const buildRequestHeaders = (req) => {
@@ -58,38 +81,77 @@ const buildRequestBody = (req) => {
   return JSON.stringify(req.body);
 };
 
-const copyResponseHeaders = (upstream, res) => {
-  upstream.headers.forEach((value, key) => {
-    if (HOP_BY_HOP_HEADERS.has(key.toLowerCase())) return;
+const snapshotResponse = async (upstream, targetUrl) => ({
+  status: upstream.status,
+  headers: Array.from(upstream.headers.entries()),
+  body: Buffer.from(await upstream.arrayBuffer()),
+  targetUrl,
+});
+
+const applyResponse = (snapshot, res) => {
+  for (const [key, value] of snapshot.headers) {
+    if (HOP_BY_HOP_HEADERS.has(key.toLowerCase())) continue;
     res.setHeader(key, value);
-  });
+  }
+  res.setHeader("x-proxy-target", snapshot.targetUrl);
+  res.status(snapshot.status).send(snapshot.body);
 };
 
+const shouldRetryWithNextTarget = (status) => status === 404 || status === 405;
+
 export default async function handler(req, res) {
-  const backendBase = normalizeBackendBase(process.env.API_BACKEND_URL);
-  if (!backendBase) {
+  const backendUrl = parseBackendUrl(process.env.API_BACKEND_URL);
+  if (!backendUrl) {
     res.status(500).json({
       message:
-        "Missing API_BACKEND_URL in Vercel environment. Set it to your backend URL (for example: https://your-api.example.com).",
+        "Missing or invalid API_BACKEND_URL in Vercel environment. Example: https://your-api.example.com",
     });
     return;
   }
 
-  try {
-    const target = buildTargetUrl(req, backendBase);
-    const upstream = await fetch(target, {
-      method: req.method,
-      headers: buildRequestHeaders(req),
-      body: buildRequestBody(req),
+  const targets = buildTargetUrls(req, backendUrl);
+  if (!targets.length) {
+    res.status(500).json({
+      message: "No proxy targets generated. Check API_BACKEND_URL format.",
     });
-
-    copyResponseHeaders(upstream, res);
-    const payload = Buffer.from(await upstream.arrayBuffer());
-    res.status(upstream.status).send(payload);
-  } catch (error) {
-    console.error("Vercel API proxy error:", error);
-    res.status(502).json({
-      message: "Unable to reach backend API through proxy.",
-    });
+    return;
   }
+
+  let firstRetriableSnapshot = null;
+  let lastNetworkError = null;
+
+  for (let index = 0; index < targets.length; index += 1) {
+    const target = targets[index];
+    const isLastTarget = index === targets.length - 1;
+
+    try {
+      const upstream = await fetch(target, {
+        method: req.method,
+        headers: buildRequestHeaders(req),
+        body: buildRequestBody(req),
+      });
+      const snapshot = await snapshotResponse(upstream, target.toString());
+
+      if (shouldRetryWithNextTarget(snapshot.status) && !isLastTarget) {
+        if (!firstRetriableSnapshot) firstRetriableSnapshot = snapshot;
+        continue;
+      }
+
+      applyResponse(snapshot, res);
+      return;
+    } catch (error) {
+      lastNetworkError = error;
+      if (isLastTarget) break;
+    }
+  }
+
+  if (firstRetriableSnapshot) {
+    applyResponse(firstRetriableSnapshot, res);
+    return;
+  }
+
+  console.error("Vercel API proxy error:", lastNetworkError);
+  res.status(502).json({
+    message: "Unable to reach backend API through proxy.",
+  });
 }
