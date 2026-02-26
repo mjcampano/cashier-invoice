@@ -128,12 +128,10 @@ const Invoice = forwardRef(function Invoice(
               <span style={styles.totalLabel}>Total Charges</span>
               <span style={styles.totalAmount}>{peso(subTotal)}</span>
             </div>
-            <div style={styles.hr} />
             <div style={styles.totalRow}>
               <span style={styles.totalLabel}>Total Payments</span>
               <span style={styles.totalAmount}>- {peso(paymentTotal)}</span>
             </div>
-            <div style={styles.hrThick} />
             <div style={styles.balanceRow}>
               <span style={styles.balanceLabel}>Balance Due</span>
               <span style={styles.balanceAmount}>{peso(balance)}</span>
@@ -177,15 +175,22 @@ const Invoice = forwardRef(function Invoice(
         <div style={styles.remarksBox}>{notes || "No remarks."}</div>
       </div>
 
-      {/* Payment Instructions */}
-      <div style={styles.paymentInstructions}>
-        <div style={styles.instructionsTitle}>Payment Instructions</div>
-        <ul style={styles.instructionsList}>
-          <li>Payment is due on the due date specified above.</li>
-          <li>Please bring this statement to the Finance/Cashier Office for payment.</li>
-          <li>Accepted payment methods: Cash, Check, Bank Transfer, Credit/Debit Card</li>
-          <li>For inquiries, contact the Finance Office.</li>
-        </ul>
+      {/* Billing Notes and Authorization */}
+      <div style={styles.billingMetaSection}>
+        <div style={styles.billingNoteCard}>
+          <div style={styles.billingNoteTitle}>Payment Terms</div>
+          <ul style={styles.billingNoteList}>
+            <li>Full payment is due on or before the due date above.</li>
+            <li>Present this statement when paying at the cashier.</li>
+            <li>For concerns about billing or payment posting, contact the Finance Office.</li>
+          </ul>
+        </div>
+        <div style={styles.authorizationCard}>
+          <div style={styles.signatoryBlock}>
+            <div style={styles.signatureNameCenter}>Joneleen Almoradie</div>
+            <div style={styles.authorizationTitle}>Chief of Finance</div>
+          </div>
+        </div>
       </div>
 
       {/* Footer */}
@@ -451,43 +456,36 @@ const styles = {
   totalsWrap: {
     display: "flex",
     justifyContent: "flex-end",
-    marginTop: 10,
+    marginTop: 6,
   },
   totalsBox: {
     width: 300,
     border: "2px solid #009944",
-    padding: 14,
+    padding: "8px 10px",
     borderRadius: 6,
     backgroundColor: "#f0f7f3",
   },
   totalRow: {
     display: "flex",
     justifyContent: "space-between",
-    margin: "8px 0",
+    margin: 0,
+    padding: "4px 0",
     fontSize: 11,
   },
   totalLabel: {
     fontWeight: 700,
-    color: "#555",
+    color: "#333",
   },
   totalAmount: {
     fontWeight: 700,
-    color: "#333",
-  },
-  hr: {
-    height: 1,
-    background: "#ddd",
-    margin: "10px 0",
-  },
-  hrThick: {
-    height: 2,
-    background: "#009944",
-    margin: "10px 0",
+    color: "#222",
   },
   balanceRow: {
     display: "flex",
     justifyContent: "space-between",
-    margin: "8px 0",
+    margin: 0,
+    paddingTop: 5,
+    borderTop: "1px solid #009944",
     fontSize: 13,
   },
   balanceLabel: {
@@ -520,28 +518,70 @@ const styles = {
     minHeight: 40,
   },
   
-  // Payment Instructions
-  paymentInstructions: {
-    backgroundColor: "#f0f7f3",
-    border: "1px solid #009944",
-    borderRadius: 6,
-    padding: 10,
+  // Billing Notes and Authorization
+  billingMetaSection: {
     marginTop: 12,
     marginBottom: 12,
+    display: "grid",
+    gridTemplateColumns: "1.4fr 1fr",
+    gap: 12,
   },
-  instructionsTitle: {
+  billingNoteCard: {
+    backgroundColor: "#f6fbf8",
+    border: "1px solid #b8dcc8",
+    borderRadius: 6,
+    padding: 10,
+  },
+  billingNoteTitle: {
     fontSize: 11,
     fontWeight: 800,
     color: "#009944",
     marginBottom: 8,
     textTransform: "uppercase",
   },
-  instructionsList: {
+  billingNoteList: {
     margin: "0 0 0 20px",
     padding: 0,
     fontSize: 10,
     color: "#444",
     lineHeight: 1.6,
+  },
+  authorizationCard: {
+    border: "1px solid #009944",
+    borderRadius: 6,
+    padding: "8px 10px 10px",
+    backgroundColor: "#fff",
+    minHeight: 96,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+  signatoryBlock: {
+    minHeight: 72,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  signatureNameCenter: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#15442d",
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    lineHeight: 1.2,
+  },
+  authorizationTitle: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: "#1f4f2f",
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 0,
+    lineHeight: 1.2,
   },
   
   // Footer

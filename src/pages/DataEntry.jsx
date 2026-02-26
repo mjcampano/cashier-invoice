@@ -139,11 +139,12 @@ export default function DataEntry({
   };
 
   const openLatestInEditor = async () => {
-    if (!onLoadLatest) return;
+    if (!onLoadLatest || !onGoPreview) return;
     setIsEditorLoading(true);
     try {
       await onLoadLatest();
-      setIsEditorOpen(true);
+      setIsEditorOpen(false);
+      onGoPreview();
     } finally {
       setIsEditorLoading(false);
     }
@@ -155,6 +156,18 @@ export default function DataEntry({
     setIsEditorLoading(true);
     try {
       await onLoadInvoice(id);
+    } finally {
+      setIsEditorLoading(false);
+    }
+  };
+
+  const openPreviewInvoice = async (id) => {
+    if (!onLoadInvoice || !onGoPreview) return;
+    setIsEditorLoading(true);
+    try {
+      await onLoadInvoice(id);
+      setIsEditorOpen(false);
+      onGoPreview();
     } finally {
       setIsEditorLoading(false);
     }
@@ -278,16 +291,29 @@ export default function DataEntry({
                 {invoiceList.map((entry) => {
                   const isBusy = activeInvoiceActionId === entry.id || isEditorLoading;
                   const isCurrent = activeInvoiceId === entry.id;
+                  const studentName = entry.student?.fullName || entry.customer?.name || "-";
+                  const studentCode =
+                    entry.student?.studentCode || entry.customer?.accountNo || "-";
 
                   return (
                     <tr key={entry.id} className={isCurrent ? "activeRow" : ""}>
-                      <td>{entry.customer?.name || "-"}</td>
-                      <td>{entry.customer?.accountNo || "-"}</td>
+                      <td>{studentName}</td>
+                      <td>{studentCode}</td>
                       <td>{entry.invoice?.cashierName || "-"}</td>
                       <td>{entry.invoice?.billingMonth || "-"}</td>
                       <td>{formatDateTime(entry.updatedAt)}</td>
                       <td>
                         <div className="savedInvoicesActions">
+                          {onLoadInvoice && (
+                            <button
+                              className="actionBtn tableActionBtn"
+                              type="button"
+                              onClick={() => openPreviewInvoice(entry.id)}
+                              disabled={listDisabled || isBusy}
+                            >
+                              {isBusy ? "Loading..." : "View"}
+                            </button>
+                          )}
                           {onLoadInvoice && (
                             <button
                               className="actionBtn tableActionBtn"

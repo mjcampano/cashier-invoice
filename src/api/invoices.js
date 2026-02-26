@@ -85,11 +85,21 @@ const buildLocalInvoiceRecord = (payload, current = null) => {
   const amountPaid = toNumber(payload?.amountPaid, paidFromPayments);
   const defaultBalance = Math.max(0, amountDue - amountPaid);
   const balance = toNumber(payload?.balance, defaultBalance);
+  const studentId = payload?.studentId || payload?.customer?.studentId || null;
+  const customer = payload?.customer ?? {};
 
   return {
     id: current?.id || createLocalId(),
     invoiceCode: String(payload?.invoiceCode || payload?.invoice?.statementNo || "").trim(),
-    studentId: payload?.studentId || payload?.customer?.studentId || null,
+    studentId,
+    student: payload?.student || {
+      id: studentId,
+      studentCode: String(customer?.accountNo || "").trim(),
+      fullName: String(customer?.name || "").trim(),
+      gradeYear: "",
+      sectionClass: "",
+      status: "",
+    },
     classId: payload?.classId || payload?.school?.classId || null,
     amountDue,
     amountPaid,
@@ -117,6 +127,7 @@ const toListItem = (record) => ({
   updatedAt: record.updatedAt,
   invoiceCode: record.invoiceCode || "",
   studentId: record.studentId || null,
+  student: record.student || null,
   classId: record.classId || null,
   amountDue: record.amountDue ?? 0,
   amountPaid: record.amountPaid ?? 0,

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import Invoice from "../models/Invoice.js";
+import Student from "../models/Student.js";
 
 const router = Router();
 
@@ -16,6 +17,49 @@ const toNumber = (value, fallback = 0) => {
 
 const toObjectIdOrNull = (value) =>
   mongoose.Types.ObjectId.isValid(value) ? new mongoose.Types.ObjectId(value) : null;
+
+const toTrimmedString = (value) => String(value || "").trim();
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const studentPopulate = {
+  path: "studentId",
+  select: "studentCode fullName gradeYear sectionClass status",
+};
+
+const getStudentIdValue = (studentRef) => {
+  if (!studentRef) return null;
+  if (typeof studentRef === "object") return studentRef._id || studentRef.id || null;
+  return studentRef;
+};
+
+const toStudentSummary = (studentRef, payload) => {
+  const fallbackName = toTrimmedString(payload?.customer?.name);
+  const fallbackCode = toTrimmedString(payload?.customer?.accountNo);
+  const fallbackId = payload?.customer?.studentId || payload?.studentId || null;
+
+  if (studentRef && typeof studentRef === "object") {
+    return {
+      id: studentRef._id || studentRef.id || fallbackId || null,
+      studentCode: studentRef.studentCode || fallbackCode || "",
+      fullName: studentRef.fullName || fallbackName || "",
+      gradeYear: studentRef.gradeYear || "",
+      sectionClass: studentRef.sectionClass || "",
+      status: studentRef.status || "",
+    };
+  }
+
+  if (!fallbackName && !fallbackCode && !fallbackId) return null;
+
+  return {
+    id: fallbackId || null,
+    studentCode: fallbackCode || "",
+    fullName: fallbackName || "",
+    gradeYear: "",
+    sectionClass: "",
+    status: "",
+  };
+};
 
 const normalizeDateOrNull = (value) => {
   if (!value) return null;
@@ -41,7 +85,70 @@ const deriveInvoiceStatus = (payload, amountDue, amountPaid, balance) => {
   return "Draft";
 };
 
-const extractInvoiceMetadata = (payload) => {
+const resolveStudentForInvoice = async (payload) => {
+  const explicitId = payload?.studentId || payload?.customer?.studentId;
+  if (mongoose.Types.ObjectId.isValid(explicitId)) {
+    const student = await Student.findById(explicitId)
+      .select("studentCode fullName gradeYear sectionClass status")
+      .lean();
+    if (student) return student;
+  }
+
+  const studentCode = toTrimmedString(payload?.customer?.accountNo || payload?.studentCode);
+  const fullName = toTrimmedString(payload?.customer?.name || payload?.fullName);
+
+  if (studentCode) {
+    const byCode = await Student.findOne({ studentCode })
+      .select("studentCode fullName gradeYear sectionClass status")
+      .lean();
+    if (byCode) return byCode;
+  }
+
+  if (fullName) {
+    const byName = await Student.findOne({
+      fullName: { $regex: `^${escapeRegex(fullName)}$`, $options: "i" },
+    })
+      .select("studentCode fullName gradeYear sectionClass status")
+      .lean();
+    if (byName) return byName;
+  }
+
+  if (!studentCode || !fullName) return null;
+
+  try {
+    const created = await Student.create({
+      studentCode,
+      fullName,
+      status: "Active",
+    });
+    return created.toObject();
+  } catch (error) {
+    if (error?.code === 11000) {
+      return Student.findOne({ studentCode })
+        .select("studentCode fullName gradeYear sectionClass status")
+        .lean();
+    }
+    throw error;
+  }
+};
+
+const attachStudentToPayload = (payload, student) => {
+  if (!student?._id && !student?.id) return payload;
+  const studentId = String(student._id || student.id);
+
+  return {
+    ...payload,
+    studentId,
+    customer: {
+      ...(payload?.customer || {}),
+      studentId,
+      name: payload?.customer?.name || student.fullName || "",
+      accountNo: payload?.customer?.accountNo || student.studentCode || "",
+    },
+  };
+};
+
+const extractInvoiceMetadata = (payload, resolvedStudentId = null) => {
   const amountDue = toNumber(payload?.amountDue ?? payload?.totals?.grandTotal, 0);
   const amountPaid = toNumber(
     payload?.amountPaid ??
@@ -55,7 +162,9 @@ const extractInvoiceMetadata = (payload) => {
 
   return {
     invoiceCode: String(payload?.invoiceCode || payload?.invoice?.statementNo || "").trim(),
-    studentId: toObjectIdOrNull(payload?.studentId || payload?.customer?.studentId),
+    studentId: toObjectIdOrNull(
+      resolvedStudentId || payload?.studentId || payload?.customer?.studentId
+    ),
     classId: toObjectIdOrNull(payload?.classId || payload?.school?.classId),
     amountDue,
     amountPaid,
@@ -70,7 +179,8 @@ const extractInvoiceMetadata = (payload) => {
 const toInvoiceResponse = (doc) => ({
   id: doc._id,
   invoiceCode: doc.invoiceCode || "",
-  studentId: doc.studentId || null,
+  studentId: getStudentIdValue(doc.studentId) || null,
+  student: toStudentSummary(doc.studentId, doc.data),
   classId: doc.classId || null,
   amountDue: doc.amountDue ?? 0,
   amountPaid: doc.amountPaid ?? 0,
@@ -106,14 +216,18 @@ const removeInvoiceById = async (id, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const docs = await Invoice.find({}).sort({ updatedAt: -1 }).lean();
+    const docs = await Invoice.find({})
+      .sort({ updatedAt: -1 })
+      .populate(studentPopulate)
+      .lean();
 
     const items = docs.map((doc) => ({
       id: doc._id,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
       invoiceCode: doc.invoiceCode || "",
-      studentId: doc.studentId || null,
+      studentId: getStudentIdValue(doc.studentId) || null,
+      student: toStudentSummary(doc.studentId, doc.data),
       classId: doc.classId || null,
       amountDue: doc.amountDue ?? 0,
       amountPaid: doc.amountPaid ?? 0,
@@ -135,7 +249,10 @@ router.get("/", async (req, res) => {
 
 router.get("/latest", async (req, res) => {
   try {
-    const doc = await Invoice.findOne({}).sort({ updatedAt: -1 }).lean();
+    const doc = await Invoice.findOne({})
+      .sort({ updatedAt: -1 })
+      .populate(studentPopulate)
+      .lean();
     if (!doc) {
       return res.status(404).json({ message: "No invoices found." });
     }
@@ -150,7 +267,7 @@ router.get("/:id", async (req, res) => {
   try {
     if (!validateId(req.params.id, res)) return;
 
-    const doc = await Invoice.findById(req.params.id).lean();
+    const doc = await Invoice.findById(req.params.id).populate(studentPopulate).lean();
     if (!doc) {
       return res.status(404).json({ message: "Invoice not found." });
     }
@@ -168,10 +285,18 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Invalid invoice payload." });
     }
 
-    const invoice = await Invoice.create({
-      data: payload,
-      ...extractInvoiceMetadata(payload),
+    const student = await resolveStudentForInvoice(payload);
+    const normalizedPayload = attachStudentToPayload(payload, student);
+
+    const createdInvoice = await Invoice.create({
+      data: normalizedPayload,
+      ...extractInvoiceMetadata(normalizedPayload, student?._id || student?.id || null),
     });
+
+    const invoice = await Invoice.findById(createdInvoice._id)
+      .populate(studentPopulate)
+      .lean();
+
     res.status(201).json(toInvoiceResponse(invoice));
   } catch (err) {
     console.error("Create invoice error:", err);
@@ -188,14 +313,19 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid invoice payload." });
     }
 
+    const student = await resolveStudentForInvoice(payload);
+    const normalizedPayload = attachStudentToPayload(payload, student);
+
     const invoice = await Invoice.findByIdAndUpdate(
       req.params.id,
       {
-        data: payload,
-        ...extractInvoiceMetadata(payload),
+        data: normalizedPayload,
+        ...extractInvoiceMetadata(normalizedPayload, student?._id || student?.id || null),
       },
       { new: true }
-    );
+    )
+      .populate(studentPopulate)
+      .lean();
 
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found." });

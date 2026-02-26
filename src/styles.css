@@ -665,22 +665,23 @@ textarea::placeholder { color: #97a1b6; }
 .invoiceEditorModalBackdrop {
   position: fixed;
   inset: 0;
-  background: rgba(11, 18, 33, 0.65);
-  backdrop-filter: blur(4px);
+  background: rgba(11, 18, 33, 0.35);
+  backdrop-filter: blur(2px);
   z-index: 60;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px;
+  padding: 0;
 }
 
 .invoiceEditorModal {
-  width: min(1400px, 100%);
-  max-height: 94vh;
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
   background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.3);
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -831,11 +832,14 @@ textarea::placeholder { color: #97a1b6; }
 .previewWrap {
   display: flex;
   justify-content: center;
-  padding: 10px;
-  overflow-x: auto;
-  background: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  align-items: flex-start;
+  width: 100%;
+  min-height: calc(100vh - 220px);
+  padding: 0;
+  overflow: auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 /* ====== Animations ====== */
@@ -922,6 +926,85 @@ textarea::placeholder { color: #97a1b6; }
   .invoiceEditorHeader {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 700px) {
+  .tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .tabBtn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .topbarTabsRow .tabBtn {
+    flex: 1 1 auto;
+  }
+
+  .financeToolbarMain,
+  .financeToolsBody,
+  .dataEntryToolbar,
+  .invoiceEditorHeaderActions,
+  .savedInvoicesActions,
+  .compactRowActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .financeToolbarMain .actionBtn,
+  .financeToolsBody .actionBtn,
+  .dataEntryToolbar .actionBtn,
+  .dataEntryToolbar .smallBtn,
+  .dataEntryToolbar .dangerBtn,
+  .invoiceEditorHeaderActions .actionBtn,
+  .savedInvoicesActions .tableActionBtn,
+  .compactRowActions .actionBtn,
+  .compactRowActions .dangerBtn,
+  .topbarUtilityActions .topbarBackBtn,
+  .topbarUtilityActions .exportBtn {
+    width: 100%;
+    min-width: 0;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .invoiceEditorBody {
+    padding: 12px;
+  }
+
+  .savedInvoicesTable {
+    min-width: 560px;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    padding: 12px;
+  }
+
+  .main {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .savedInvoicesTable {
+    min-width: 500px;
+  }
+
+  .savedInvoicesTable th,
+  .savedInvoicesTable td {
+    padding: 8px;
+    font-size: 11px;
   }
 }
 

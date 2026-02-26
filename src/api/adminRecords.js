@@ -114,4 +114,18 @@ export const updateStudent = (id, payload) =>
     body: JSON.stringify(payload),
   });
 
+export const deleteStudent = async (id) => {
+  try {
+    return await request(`/students/${id}`, { method: "DELETE" });
+  } catch (error) {
+    const message = String(error?.message || "");
+    const shouldFallback =
+      error?.isNetworkError || error?.status === 404 || error?.status === 405 || /cannot delete/i.test(message);
+
+    if (!shouldFallback) throw error;
+
+    return request(`/students/${id}/delete`, { method: "POST" });
+  }
+};
+
 export const getStatus = () => request("/status");

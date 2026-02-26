@@ -6,7 +6,8 @@ import StatusBadge from "../components/StatusBadge";
 import TablePagination from "../components/TablePagination";
 import { requirementTypes } from "../data/seedData";
 import { exportRowsToCsv, paginateRows, rowMatchesSearch } from "../utils/tableHelpers";
-import { createStudent, listStudents } from "../../../api/adminRecords";
+import { createStudent, deleteStudent, listStudents } from "../../../api/adminRecords";
+import useNotifications from "../../../components/notifications/useNotifications";
 
 const studentTabs = [
   { id: "overview", label: "Overview" },
@@ -375,6 +376,7 @@ const normalizeBackendStudent = (student) => {
 };
 
 export default function StudentsPage() {
+  const { confirm, showAlert, showToast } = useNotifications();
   const [students, setStudents] = useState([]);
   const [view, setView] = useState("table");
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -392,6 +394,7 @@ export default function StudentsPage() {
   const [addStatus, setAddStatus] = useState("");
   const [addError, setAddError] = useState("");
   const [isAddingStudent, setIsAddingStudent] = useState(false);
+  const addStudentLockRef = useRef(false);
   const [isFetchingStudents, setIsFetchingStudents] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
@@ -403,6 +406,9 @@ export default function StudentsPage() {
   const requirementFileInputRef = useRef(null);
   const [requirementUploadMessage, setRequirementUploadMessage] = useState("");
   const [activeRequirementUploadId, setActiveRequirementUploadId] = useState(null);
+  const [deletingStudentBackendId, setDeletingStudentBackendId] = useState(null);
+
+  const isObjectId = (value) => /^[a-f0-9]{24}$/i.test(String(value || ""));
 
   const fetchStudents = useCallback(async () => {
     setFetchError("");
@@ -759,13 +765,69 @@ export default function StudentsPage() {
     );
   };
 
+  const handleDeleteStudent = useCallback(
+    async (student) => {
+      if (!student) return;
+
+      const backendId = student.id;
+      if (!isObjectId(backendId)) {
+        setStudents((currentStudents) => currentStudents.filter((entry) => entry !== student));
+        showToast("Removed unsaved student row.", { type: "success" });
+        if (view === "profile" && getStudentId(student) === selectedStudentId) {
+          setView("table");
+        }
+        return;
+      }
+
+      if (deletingStudentBackendId === backendId) return;
+
+      const accepted = await confirm(
+        `Delete student ${getStudentId(student)}? This cannot be undone.`,
+        {
+          title: "Delete student",
+          confirmLabel: "Delete",
+          cancelLabel: "Cancel",
+        }
+      );
+
+      if (!accepted) return;
+
+      setDeletingStudentBackendId(backendId);
+      try {
+        await deleteStudent(backendId);
+        showToast("Student deleted.", { type: "success" });
+        if (view === "profile" && getStudentId(student) === selectedStudentId) {
+          setView("table");
+        }
+        await fetchStudents();
+      } catch (error) {
+        console.error("Delete student error:", error);
+        showAlert(error?.message || "Failed to delete student.", { variant: "danger" });
+      } finally {
+        setDeletingStudentBackendId(null);
+      }
+    },
+    [
+      confirm,
+      deletingStudentBackendId,
+      fetchStudents,
+      selectedStudentId,
+      showAlert,
+      showToast,
+      view,
+    ]
+  );
+
   const handleAddStudent = async () => {
+    if (addStudentLockRef.current || isAddingStudent) return;
+    addStudentLockRef.current = true;
+    setIsAddingStudent(true);
+
     const newStudent = createBlankStudent(students);
     setStudents((currentStudents) => [newStudent, ...currentStudents]);
     setPage(1);
     setAddStatus("Saving new student...");
     setAddError("");
-    setIsAddingStudent(true);
     openStudentProfile(getStudentId(newStudent), "personal");
     beginPersonalEditForStudent(newStudent);
 
@@ -794,8 +856,14 @@ export default function StudentsPage() {
       console.error("Create student error:", error);
       setAddStatus("Failed to save student.");
       setAddError(error?.message || "Unable to reach the API.");
+      setStudents((currentStudents) =>
+        currentStudents.filter((student) => student !== newStudent)
+      );
+      setView("table");
+      await fetchStudents();
     } finally {
       setIsAddingStudent(false);
+      addStudentLockRef.current = false;
     }
   };
 
@@ -1051,10 +1119,11 @@ export default function StudentsPage() {
                         className="sa-btn sa-btn-danger"
                         onClick={(event) => {
                           event.stopPropagation();
-                          archiveStudent(row.studentId);
+                          handleDeleteStudent(row.student);
                         }}
+                        disabled={deletingStudentBackendId === row.student?.id}
                       >
-                        Archive
+                        {deletingStudentBackendId === row.student?.id ? "Deleting..." : "Delete"}
                       </button>
                     </div>
                   </td>
@@ -1125,9 +1194,10 @@ export default function StudentsPage() {
               <button
                 type="button"
                 className="sa-btn sa-btn-danger"
-                onClick={() => archiveStudent(getStudentId(selectedStudent))}
+                onClick={() => handleDeleteStudent(selectedStudent)}
+                disabled={deletingStudentBackendId === selectedStudent?.id}
               >
-                Archive
+                {deletingStudentBackendId === selectedStudent?.id ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>

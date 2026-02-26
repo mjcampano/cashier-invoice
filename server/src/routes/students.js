@@ -11,6 +11,26 @@ const parsePositiveInt = (value, fallback) => {
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
+const validateStudentId = (id, res) => {
+  if (!isValidObjectId(id)) {
+    res.status(400).json({ message: "Invalid student id." });
+    return false;
+  }
+  return true;
+};
+
+const removeStudentById = async (id, res) => {
+  if (!validateStudentId(id, res)) return;
+
+  const student = await Student.findByIdAndDelete(id);
+  if (!student) {
+    res.status(404).json({ message: "Student not found." });
+    return;
+  }
+
+  res.json({ ok: true, id });
+};
+
 router.get("/", async (req, res) => {
   try {
     const page = parsePositiveInt(req.query.page, 1);
@@ -108,9 +128,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    if (!isValidObjectId(id)) {
-      return res.status(400).json({ message: "Invalid student id." });
-    }
+    if (!validateStudentId(id, res)) return;
 
     const payload = req.body || {};
     const updates = {};
@@ -167,6 +185,24 @@ router.put("/:id", async (req, res) => {
     }
     console.error("Update student error:", error);
     res.status(500).json({ message: "Failed to update student." });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    await removeStudentById(req.params.id, res);
+  } catch (error) {
+    console.error("Delete student error:", error);
+    res.status(500).json({ message: "Failed to delete student." });
+  }
+});
+
+router.post("/:id/delete", async (req, res) => {
+  try {
+    await removeStudentById(req.params.id, res);
+  } catch (error) {
+    console.error("Delete student via POST error:", error);
+    res.status(500).json({ message: "Failed to delete student." });
   }
 });
 
