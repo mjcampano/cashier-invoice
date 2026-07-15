@@ -13,10 +13,6 @@ export default function DataEntry({
   saveStatus,
   saveDisabled,
   loadDisabled,
-  apiStatus,
-  apiMessage,
-  apiCheckedAt,
-  onCheckApi,
   invoiceList = [],
   invoiceListStatus,
   listDisabled,
@@ -24,9 +20,6 @@ export default function DataEntry({
   onLoadInvoice,
   onDeleteInvoice,
   onNewInvoice,
-  onRunDeleteApiTest,
-  deleteApiTestDisabled,
-  isDeleteApiTestRunning,
   activeInvoiceId,
   activeInvoiceActionId,
 }) {
@@ -50,16 +43,6 @@ export default function DataEntry({
   );
 
   const balance = subTotal - paymentsTotal;
-
-  const apiStatusLabel =
-    apiStatus === "ok"
-      ? "Connected"
-      : apiStatus === "checking"
-        ? "Checking..."
-        : apiStatus === "error"
-          ? "Offline"
-          : "Unknown";
-  const hasSystemTools = Boolean(onCheckApi || onRunDeleteApiTest);
 
   const formatDateTime = (value) => {
     if (!value) return "-";
@@ -223,57 +206,17 @@ export default function DataEntry({
               </button>
             )}
           </div>
-
-          {hasSystemTools && (
-            <details className="financeToolsPanel">
-              <summary className="financeToolsToggle">System Tools</summary>
-              <div className="financeToolsBody">
-                {onCheckApi && (
-                  <button
-                    className="actionBtn"
-                    onClick={onCheckApi}
-                    type="button"
-                    disabled={apiStatus === "checking"}
-                  >
-                    Check API
-                  </button>
-                )}
-                {onRunDeleteApiTest && (
-                  <button
-                    className="actionBtn warning"
-                    onClick={onRunDeleteApiTest}
-                    type="button"
-                    disabled={deleteApiTestDisabled || isEditorLoading}
-                  >
-                    {isDeleteApiTestRunning ? "Testing Delete..." : "Test Delete API"}
-                  </button>
-                )}
-              </div>
-            </details>
-          )}
         </div>
 
-        {onCheckApi && (
-          <div className="apiStatusRow">
-            <div className={`apiStatusBadge ${apiStatus}`}>API: {apiStatusLabel}</div>
-            {apiCheckedAt && (
-              <div className="apiStatusTime">
-                Last checked: {new Date(apiCheckedAt).toLocaleTimeString()}
-              </div>
-            )}
-          </div>
-        )}
-
         {saveStatus && <div className="smallMuted">{saveStatus}</div>}
-        {apiStatus === "error" && apiMessage && <div className="smallMuted">{apiMessage}</div>}
       </section>
 
       <section className="card">
-        <h3 className="h3">Saved Students</h3>
+        <h3 className="h3">Saved Invoices</h3>
         {invoiceListStatus && <div className="smallMuted">{invoiceListStatus}</div>}
 
         {invoiceList.length === 0 ? (
-          <div className="smallMuted">No students saved yet. Click Add Student to create one.</div>
+          <div className="smallMuted">No invoices saved yet. Click Add Student to create one.</div>
         ) : (
           <div className="savedInvoicesTableWrap">
             <table className="savedInvoicesTable">

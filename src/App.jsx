@@ -5,8 +5,6 @@ import Tabs from "./components/Tabs";
 import DataEntry from "./pages/DataEntry";
 import Preview from "./pages/Preview";
 import ProofOfPayment from "./components/ProofOfPayment";
-import AdminLayout from "./layouts/AdminLayout";
-import AdminWorkspace from "./features/admin/AdminWorkspace";
 import useNotifications from "./components/notifications/useNotifications";
 
 import { PROGRAMS, buildSchoolItems } from "./data/tuitionTemplates";
@@ -14,12 +12,11 @@ import { uid } from "./utils";
 import {
   createInvoice,
   deleteInvoice,
-  getApiHealth,
   getInvoice,
   getLatestInvoice,
   listInvoices,
   updateInvoice,
-} from "./api/invoices";
+} from "./storage/invoices";
 
 const createDefaultData = () => ({
   school: {
@@ -98,8 +95,6 @@ export default function App() {
     confirm,
   } = useNotifications();
 
-  const [mode, setMode] = useState("admin"); // "admin" or "invoice"
-  const [activeMenu, setActiveMenu] = useState("dashboard");
   const [tab, setTab] = useState("form");
   const [isExporting, setIsExporting] = useState(false);
   const [invoiceId, setInvoiceId] = useState(null);
@@ -107,13 +102,9 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isListingInvoices, setIsListingInvoices] = useState(false);
-  const [isDeleteTestRunning, setIsDeleteTestRunning] = useState(false);
   const [invoiceList, setInvoiceList] = useState([]);
   const [invoiceListStatus, setInvoiceListStatus] = useState("");
   const [activeInvoiceActionId, setActiveInvoiceActionId] = useState(null);
-  const [apiStatus, setApiStatus] = useState("idle"); // idle | checking | ok | error
-  const [apiMessage, setApiMessage] = useState("");
-  const [apiCheckedAt, setApiCheckedAt] = useState(null);
 
   // ✅ Keep uploads in App so it persists across tab switching
   const [uploads, setUploads] = useState([]);
@@ -202,6 +193,67 @@ export default function App() {
     }
   }, [showAlert]);
 
+  const handleLoadInvoice = useCallback(
+    async (id) => {
+      if (!id || isLoading) return;
+
+      clearValidation();
+      setIsLoading(true);
+      setActiveInvoiceActionId(id);
+      setSaveStatus("Loading selected invoice...");
+
+      try {
+        const response = await getInvoice(id);
+        setData(normalizeInvoiceData(response.data));
+        setInvoiceId(response.id);
+        setSaveStatus(`Loaded invoice ${response.id}`);
+      } catch (err) {
+        console.error("Load invoice by id error:", err);
+        setSaveStatus(err.message || "Load failed.");
+        showAlert(err.message || "Load failed.", { variant: "danger" });
+      } finally {
+        setActiveInvoiceActionId(null);
+        setIsLoading(false);
+      }
+    },
+    [isLoading, showAlert, clearValidation]
+  );
+
+  const handleDeleteInvoice = useCallback(
+    async (id) => {
+      if (!id) return;
+
+      const confirmed = await confirm("Delete this saved invoice? This cannot be undone.", {
+        title: "Delete invoice",
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+      });
+
+      if (!confirmed) return;
+
+      setActiveInvoiceActionId(id);
+      setSaveStatus("Deleting invoice...");
+
+      try {
+        await deleteInvoice(id);
+        if (invoiceId === id) {
+          setInvoiceId(null);
+          setData(createDefaultData());
+        }
+        setSaveStatus("Invoice deleted.");
+        showAlert("Invoice deleted.", { variant: "success" });
+        await handleRefreshInvoices();
+      } catch (err) {
+        console.error("Delete invoice error:", err);
+        setSaveStatus(err.message || "Delete failed.");
+        showAlert(err.message || "Delete failed.", { variant: "danger" });
+      } finally {
+        setActiveInvoiceActionId(null);
+      }
+    },
+    [confirm, handleRefreshInvoices, invoiceId, showAlert]
+  );
+
   const handleSaveInvoice = useCallback(async () => {
     if (isSaving) return;
 
@@ -262,70 +314,6 @@ export default function App() {
     }
   }, [isLoading, showToast, showAlert, clearValidation]);
 
-  const handleLoadInvoice = useCallback(
-    async (id) => {
-      if (!id || isLoading) return;
-
-      clearValidation();
-      setIsLoading(true);
-      setActiveInvoiceActionId(id);
-      setSaveStatus("Loading selected invoice...");
-
-      try {
-        const response = await getInvoice(id);
-        setData(normalizeInvoiceData(response.data));
-        setInvoiceId(response.id);
-        setSaveStatus(`Loaded invoice ${response.id}`);
-      } catch (err) {
-        console.error("Load invoice by id error:", err);
-        setSaveStatus(err.message || "Load failed.");
-        showAlert(err.message || "Load failed.", { variant: "danger" });
-      } finally {
-        setActiveInvoiceActionId(null);
-        setIsLoading(false);
-      }
-    },
-    [isLoading, showAlert, clearValidation]
-  );
-
-  const handleDeleteInvoice = useCallback(
-    async (id) => {
-      if (!id) return;
-
-      const confirmed = await confirm(
-        "Delete this saved student invoice? This cannot be undone.",
-        {
-          title: "Delete invoice",
-          confirmLabel: "Delete",
-          cancelLabel: "Cancel",
-        }
-      );
-
-      if (!confirmed) return;
-
-      setActiveInvoiceActionId(id);
-      setSaveStatus("Deleting invoice...");
-
-      try {
-        await deleteInvoice(id);
-        if (invoiceId === id) {
-          setInvoiceId(null);
-          setData(createDefaultData());
-        }
-        setSaveStatus("Invoice deleted.");
-        showAlert("Invoice deleted.", { variant: "success" });
-        await handleRefreshInvoices();
-      } catch (err) {
-        console.error("Delete invoice error:", err);
-        setSaveStatus(err.message || "Delete failed.");
-        showAlert(err.message || "Delete failed.", { variant: "danger" });
-      } finally {
-        setActiveInvoiceActionId(null);
-      }
-    },
-    [confirm, handleRefreshInvoices, invoiceId, showAlert]
-  );
-
   const handleNewInvoice = useCallback(() => {
     setData(createDefaultData());
     setInvoiceId(null);
@@ -333,166 +321,74 @@ export default function App() {
     clearValidation();
   }, [clearValidation]);
 
-  const handleBackToAdmin = useCallback(() => {
-    setMode("admin");
-    setActiveMenu("dashboard");
-  }, []);
-
-  const handleRunDeleteApiTest = useCallback(async () => {
-    if (isDeleteTestRunning) return;
-
-    setIsDeleteTestRunning(true);
-    setSaveStatus("Running delete API test...");
-
-    try {
-      const now = Date.now();
-      const base = createDefaultData();
-      const testPayload = {
-        ...base,
-        customer: {
-          ...base.customer,
-          name: `DELETE API TEST ${now}`,
-          accountNo: `TEST-${now}`,
-        },
-        invoice: {
-          ...base.invoice,
-          statementNo: `DEL-TEST-${now}`,
-          billingMonth: "Delete API Test",
-        },
-        notes: "Temporary record created by Delete API test.",
-      };
-
-      const created = await createInvoice(testPayload);
-      await deleteInvoice(created.id);
-
-      setSaveStatus(`Delete API test passed at ${new Date().toLocaleTimeString()}`);
-      showToast("Delete API test passed.");
-      await handleRefreshInvoices();
-    } catch (err) {
-      console.error("Delete API test error:", err);
-      const message = err.message || "Unknown error";
-      setSaveStatus(`Delete API test failed: ${message}`);
-      showAlert(`Delete API test failed: ${message}`, { variant: "danger" });
-    } finally {
-      setIsDeleteTestRunning(false);
-    }
-  }, [handleRefreshInvoices, isDeleteTestRunning, showToast, showAlert]);
-
-  const handleCheckApi = useCallback(async () => {
-    setApiStatus("checking");
-    setApiMessage("Checking connection...");
-
-    try {
-      await getApiHealth();
-      setApiStatus("ok");
-      setApiMessage("Connected");
-    } catch (err) {
-      console.error("API health check error:", err);
-      setApiStatus("error");
-      setApiMessage(err.message || "Connection failed");
-      showAlert(err.message || "Connection failed", { variant: "danger" });
-    } finally {
-      setApiCheckedAt(new Date());
-    }
-  }, [showAlert]);
-
   useEffect(() => {
-    handleCheckApi();
     handleRefreshInvoices();
-  }, [handleCheckApi, handleRefreshInvoices]);
+  }, [handleRefreshInvoices]);
 
   return (
-    <AdminLayout
-      setMode={setMode}
-      activeMenu={activeMenu}
-      setActiveMenu={setActiveMenu}
-      contentClassName={mode === "invoice" ? "content-wrapper--finance" : ""}
-    >
-      {mode === "invoice" ? (
-        <div className="shell financeShellFull">
-          <header className="topbar">
-            <div className="topbarMainRow">
-              <div className="topbarBrandGroup">
-                <div className="brand">Cashier Invoice</div>
-                <div className="topbarBadge">Finance Console</div>
-              </div>
+    <div className="shell financeShellFull">
+      <header className="topbar">
+        <div className="topbarMainRow">
+          <div className="topbarBrandGroup">
+            <div className="brand">Cashier Invoice</div>
+            <div className="topbarBadge">Finance Console</div>
+          </div>
 
-              <div className="topbarUtilityActions">
-                <button
-                  className="actionBtn topbarBackBtn"
-                  onClick={handleBackToAdmin}
-                  type="button"
-                >
-                  Back to Admin
-                </button>
-
-                <button
-                  className="exportBtn"
-                  onClick={exportPDF}
-                  type="button"
-                  disabled={isExporting}
-                  title={isExporting ? "Exporting..." : "Export PDF"}
-                >
-                  {isExporting ? "Exporting..." : "Export PDF"}
-                </button>
-              </div>
-            </div>
-
-            <div className="topbarTabsRow">
-              <Tabs tab={tab} setTab={setTab} />
-            </div>
-          </header>
-
-          <main className="main">
-            {tab === "form" ? (
-              <DataEntry
-                data={data}
-                setData={setData}
-                uid={uid}
-                onGoPreview={() => setTab("preview")}
-                PROGRAMS={PROGRAMS}
-                buildSchoolItems={buildSchoolItems}
-                onApplySchoolTemplate={applySchoolTemplateToItems}
-                onSaveInvoice={handleSaveInvoice}
-                onLoadLatest={handleLoadLatest}
-                saveStatus={saveStatus}
-                saveDisabled={isSaving || isLoading}
-                loadDisabled={isSaving || isLoading}
-                apiStatus={apiStatus}
-                apiMessage={apiMessage}
-                apiCheckedAt={apiCheckedAt}
-                onCheckApi={handleCheckApi}
-                invoiceList={invoiceList}
-                invoiceListStatus={invoiceListStatus}
-                listDisabled={isSaving || isLoading || isListingInvoices}
-                onRefreshInvoices={handleRefreshInvoices}
-                onLoadInvoice={handleLoadInvoice}
-                onDeleteInvoice={handleDeleteInvoice}
-                onNewInvoice={handleNewInvoice}
-                onRunDeleteApiTest={handleRunDeleteApiTest}
-                deleteApiTestDisabled={
-                  isSaving || isLoading || isListingInvoices || isDeleteTestRunning
-                }
-                isDeleteApiTestRunning={isDeleteTestRunning}
-                activeInvoiceId={invoiceId}
-                activeInvoiceActionId={activeInvoiceActionId}
-              />
-            ) : tab === "preview" ? (
-              <Preview invoiceRef={invoiceRef} data={data} />
-            ) : (
-              <ProofOfPayment
-                data={data}
-                setData={setData}
-                uploads={uploads}
-                setUploads={setUploads}
-                onGoPreview={() => setTab("preview")}
-              />
-            )}
-          </main>
+          <div className="topbarUtilityActions">
+            <button
+              className="exportBtn"
+              onClick={exportPDF}
+              type="button"
+              disabled={isExporting}
+              title={isExporting ? "Exporting..." : "Export PDF"}
+            >
+              {isExporting ? "Exporting..." : "Export PDF"}
+            </button>
+          </div>
         </div>
-      ) : (
-        <AdminWorkspace activeMenu={activeMenu} onNavigate={setActiveMenu} />
-      )}
-    </AdminLayout>
+
+        <div className="topbarTabsRow">
+          <Tabs tab={tab} setTab={setTab} />
+        </div>
+      </header>
+
+      <main className="main">
+        {tab === "form" ? (
+          <DataEntry
+            data={data}
+            setData={setData}
+            uid={uid}
+            onGoPreview={() => setTab("preview")}
+            PROGRAMS={PROGRAMS}
+            buildSchoolItems={buildSchoolItems}
+            onApplySchoolTemplate={applySchoolTemplateToItems}
+            onSaveInvoice={handleSaveInvoice}
+            onLoadLatest={handleLoadLatest}
+            saveStatus={saveStatus}
+            saveDisabled={isSaving || isLoading}
+            loadDisabled={isSaving || isLoading}
+            onNewInvoice={handleNewInvoice}
+            invoiceList={invoiceList}
+            invoiceListStatus={invoiceListStatus}
+            listDisabled={isSaving || isLoading || isListingInvoices}
+            onRefreshInvoices={handleRefreshInvoices}
+            onLoadInvoice={handleLoadInvoice}
+            onDeleteInvoice={handleDeleteInvoice}
+            activeInvoiceId={invoiceId}
+            activeInvoiceActionId={activeInvoiceActionId}
+          />
+        ) : tab === "preview" ? (
+          <Preview invoiceRef={invoiceRef} data={data} />
+        ) : (
+          <ProofOfPayment
+            data={data}
+            setData={setData}
+            uploads={uploads}
+            setUploads={setUploads}
+            onGoPreview={() => setTab("preview")}
+          />
+        )}
+      </main>
+    </div>
   );
 }
