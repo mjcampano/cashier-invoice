@@ -437,45 +437,35 @@ textarea::placeholder {
   padding: 0 8px 8px;
 }
 
-.apiStatusRow {
+.financeToolbarSecondary {
   display: flex;
-  align-items: center;
+  align-items: end;
   gap: 10px;
   flex-wrap: wrap;
-  margin: 8px 0 12px;
+  margin-left: auto;
 }
 
-.apiStatusBadge {
-  font-size: 12px;
+.financeSearchField,
+.financePageSizeField {
+  display: grid;
+  gap: 6px;
+}
+
+.financeSearchLabel {
+  font-size: 11px;
   font-weight: 800;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #f8fafc;
-  color: var(--muted);
+  color: var(--primary-2);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
 }
 
-.apiStatusBadge.ok {
-  background: #ecfdf3;
-  border-color: #bbf7d0;
-  color: #166534;
+.financeSearchInput,
+.financePageSizeSelect {
+  min-width: 260px;
 }
 
-.apiStatusBadge.error {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #991b1b;
-}
-
-.apiStatusBadge.checking {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
-}
-
-.apiStatusTime {
-  font-size: 12px;
-  color: var(--muted);
+.financePageSizeSelect {
+  min-width: 120px;
 }
 
 .savedInvoicesTableWrap {
@@ -534,6 +524,32 @@ textarea::placeholder {
   min-width: 80px;
   justify-content: center;
   text-align: center;
+}
+
+.financePaginationBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.financePaginationActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.financePaginationPage {
+  min-width: 110px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
 }
 
 .invoiceEditorModalBackdrop {
@@ -917,6 +933,16 @@ textarea::placeholder {
   box-shadow: var(--shadow);
 }
 
+.toast-container {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 10px;
+  z-index: 210;
+  width: min(360px, calc(100% - 32px));
+}
+
 .notification-banner {
   top: 16px;
   background: #eff6ff;
@@ -948,6 +974,47 @@ textarea::placeholder {
   font-size: 16px;
   line-height: 1;
   padding: 0;
+}
+
+.confirmation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(11, 18, 33, 0.52);
+  backdrop-filter: blur(3px);
+}
+
+.confirmation-dialog {
+  width: min(420px, 100%);
+  padding: 18px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.24);
+}
+
+.confirmation-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.confirmation-message {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Utilities */
@@ -1040,8 +1107,19 @@ textarea::placeholder {
     align-items: stretch;
   }
 
+  .financeToolbarSecondary {
+    margin-left: 0;
+    width: 100%;
+  }
+
   .financeToolbarMain,
   .financeToolsBody {
+    width: 100%;
+  }
+
+  .financeSearchInput,
+  .financePageSizeSelect {
+    min-width: 0;
     width: 100%;
   }
 
@@ -1106,6 +1184,7 @@ textarea::placeholder {
 
   .financeToolbarMain,
   .financeToolsBody,
+  .financeToolbarSecondary,
   .dataEntryToolbar,
   .invoiceEditorHeaderActions,
   .savedInvoicesActions,
@@ -1156,6 +1235,21 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .financePaginationBar,
+  .confirmation-actions {
+    width: 100%;
+  }
+
+  .financePaginationActions,
+  .confirmation-actions {
+    justify-content: stretch;
+  }
+
+  .financePaginationActions .actionBtn,
+  .confirmation-actions .actionBtn {
+    flex: 1 1 140px;
+  }
+
   .invoiceEditorBody {
     padding: 12px;
   }
@@ -1189,6 +1283,11 @@ textarea::placeholder {
 
   .invoiceEditorTitle {
     font-size: 16px;
+  }
+
+  .confirmation-dialog {
+    padding: 16px;
+    border-radius: 16px;
   }
 }
 

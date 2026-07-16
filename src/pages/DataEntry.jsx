@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { peso } from "../utils";
 
 export default function DataEntry({
@@ -27,6 +27,9 @@ export default function DataEntry({
   const [isEditorLoading, setIsEditorLoading] = useState(false);
   const [expandedItemIds, setExpandedItemIds] = useState({});
   const [expandedPaymentIds, setExpandedPaymentIds] = useState({});
+  const [invoiceSearchTerm, setInvoiceSearchTerm] = useState("");
+  const [invoicePageSize, setInvoicePageSize] = useState(10);
+  const [invoicePage, setInvoicePage] = useState(1);
 
   const subTotal = useMemo(
     () =>
@@ -50,6 +53,41 @@ export default function DataEntry({
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleString();
   };
+
+  const filteredInvoiceList = useMemo(() => {
+    const term = invoiceSearchTerm.trim().toLowerCase();
+    if (!term) return invoiceList;
+
+    return invoiceList.filter((entry) => {
+      const studentName = entry.student?.fullName || entry.customer?.name || "";
+      const studentCode = entry.student?.studentCode || entry.customer?.accountNo || "";
+      const course = entry.invoice?.cashierName || "";
+      const termLabel = entry.invoice?.billingMonth || "";
+      const updatedAt = formatDateTime(entry.updatedAt);
+
+      return [studentName, studentCode, course, termLabel, updatedAt]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [invoiceList, invoiceSearchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredInvoiceList.length / invoicePageSize));
+
+  const pagedInvoiceList = useMemo(() => {
+    const startIndex = (invoicePage - 1) * invoicePageSize;
+    return filteredInvoiceList.slice(startIndex, startIndex + invoicePageSize);
+  }, [filteredInvoiceList, invoicePage, invoicePageSize]);
+
+  useEffect(() => {
+    setInvoicePage(1);
+  }, [invoiceSearchTerm, invoicePageSize, invoiceList.length]);
+
+  useEffect(() => {
+    if (invoicePage > totalPages) {
+      setInvoicePage(totalPages);
+    }
+  }, [invoicePage, totalPages]);
 
   const setBusiness = (k, v) =>
     setData((d) => ({ ...d, business: { ...d.business, [k]: v } }));
@@ -206,6 +244,31 @@ export default function DataEntry({
               </button>
             )}
           </div>
+
+          <div className="financeToolbarSecondary">
+            <label className="financeSearchField">
+              <span className="financeSearchLabel">Search invoices</span>
+              <input
+                className="input financeSearchInput"
+                value={invoiceSearchTerm}
+                onChange={(event) => setInvoiceSearchTerm(event.target.value)}
+                placeholder="Search student, ID, course, term..."
+                type="search"
+              />
+            </label>
+
+            <label className="financePageSizeField">
+              <span className="financeSearchLabel">Rows</span>
+              <select
+                className="input financePageSizeSelect"
+                value={invoicePageSize}
+                onChange={(event) => setInvoicePageSize(Number(event.target.value))}
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         {saveStatus && <div className="smallMuted">{saveStatus}</div>}
@@ -215,7 +278,7 @@ export default function DataEntry({
         <h3 className="h3">Saved Invoices</h3>
         {invoiceListStatus && <div className="smallMuted">{invoiceListStatus}</div>}
 
-        {invoiceList.length === 0 ? (
+        {filteredInvoiceList.length === 0 ? (
           <div className="smallMuted">No invoices saved yet. Click Add Student to create one.</div>
         ) : (
           <div className="savedInvoicesTableWrap">
@@ -231,7 +294,7 @@ export default function DataEntry({
                 </tr>
               </thead>
               <tbody>
-                {invoiceList.map((entry) => {
+                {pagedInvoiceList.map((entry) => {
                   const isBusy = activeInvoiceActionId === entry.id || isEditorLoading;
                   const isCurrent = activeInvoiceId === entry.id;
                   const studentName = entry.student?.fullName || entry.customer?.name || "-";
@@ -284,6 +347,33 @@ export default function DataEntry({
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {filteredInvoiceList.length > 0 && (
+          <div className="financePaginationBar">
+            <div className="smallMuted">
+              Showing {(invoicePage - 1) * invoicePageSize + 1} to {Math.min(invoicePage * invoicePageSize, filteredInvoiceList.length)} of {filteredInvoiceList.length}
+            </div>
+            <div className="financePaginationActions">
+              <button
+                className="actionBtn"
+                type="button"
+                onClick={() => setInvoicePage((page) => Math.max(1, page - 1))}
+                disabled={invoicePage <= 1}
+              >
+                Prev
+              </button>
+              <div className="financePaginationPage">Page {invoicePage} / {totalPages}</div>
+              <button
+                className="actionBtn"
+                type="button"
+                onClick={() => setInvoicePage((page) => Math.min(totalPages, page + 1))}
+                disabled={invoicePage >= totalPages}
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </section>
