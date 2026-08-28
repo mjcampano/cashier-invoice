@@ -1,4 +1,4 @@
-export { peso, uid } from "./formatting";
+export { peso, uid, toNumber } from "./formatting";
 export {
   makeRefNo,
   guessAmountFromFilename,

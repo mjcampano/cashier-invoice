@@ -1,13 +1,16 @@
 import React, { forwardRef } from "react";
-import { peso } from "../utils";
+import { peso, toNumber } from "../utils";
 import logo from "../assets/logo.png";
 
 const Invoice = forwardRef(function Invoice(
   { business, customer, invoice, items, payments, notes },
   ref
 ) {
-  const subTotal = items.reduce((sum, it) => sum + it.qty * it.unitPrice, 0);
-  const paymentTotal = payments.reduce((sum, p) => sum + p.amount, 0);
+  const subTotal = items.reduce(
+    (sum, it) => sum + toNumber(it.qty) * toNumber(it.unitPrice),
+    0
+  );
+  const paymentTotal = payments.reduce((sum, p) => sum + toNumber(p.amount), 0);
   const balance = subTotal - paymentTotal;
 
   return (

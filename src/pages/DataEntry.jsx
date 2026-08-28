@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { peso } from "../utils";
+import { peso, toNumber } from "../utils";
 
 export default function DataEntry({
   data,
@@ -34,14 +34,14 @@ export default function DataEntry({
   const subTotal = useMemo(
     () =>
       data.items.reduce(
-        (sum, it) => sum + Number(it.qty || 0) * Number(it.unitPrice || 0),
+        (sum, it) => sum + toNumber(it.qty) * toNumber(it.unitPrice),
         0
       ),
     [data.items]
   );
 
   const paymentsTotal = useMemo(
-    () => data.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0),
+    () => data.payments.reduce((sum, p) => sum + toNumber(p.amount), 0),
     [data.payments]
   );
 
